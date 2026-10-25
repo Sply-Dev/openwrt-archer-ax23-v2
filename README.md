@@ -1,8 +1,7 @@
 # TP-Link Archer AX23 v2 - OpenWrt port (work in progress)
 
 [![OpenWrt target: qualcommax/ipq50xx](https://img.shields.io/badge/OpenWrt-qualcommax%2Fipq50xx-0088CC?logo=openwrt&logoColor=white)](docs/HARDWARE.md)
-[![License: GPL v2](https://img.shields.io/badge/license-GPL--2.0-6E40C9.svg)](LICENSE)
-[![Status: untested on hardware](https://img.shields.io/badge/status-untested%20on%20hardware-D97706.svg)](docs/archer-ax23-v2-port-status.md)
+[![License: GPL v2](https://img.shields.io/badge/license-GPL--2.0-8B8B8B.svg)](LICENSE)
 
 This repository tracks an in-progress OpenWrt port for the **TP-Link Archer AX23 v2**
 (hardware version `v2.0`, Qualcomm IPQ5018 / 256MB RAM - not to be confused with the
