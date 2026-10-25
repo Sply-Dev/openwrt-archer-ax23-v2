@@ -41,7 +41,7 @@ including upstream OpenWrt maintainers.
 | `docs/archer-ax23-v2-port-status.md` | Point-in-time status snapshot with evidence tags |
 | `docs/CREDITS.md` | Who wrote what - this project's own work vs. carried-in third-party patches |
 | `target/` | DTS, image definition snippet, and carried-in switch driver patches for this device |
-| `patches/` | Patches not meant to be committed as a file (apply with `patch -p1`), e.g. the caldata hotplug change |
+| `patches/` | Locally maintained patches versioned in this repository and applied manually during the build, e.g. the caldata hotplug change |
 
 ## What is and isn't here
 
