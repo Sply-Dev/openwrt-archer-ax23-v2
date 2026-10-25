@@ -27,6 +27,7 @@ including upstream OpenWrt maintainers.
 | `docs/BUILD.md` | How to reproduce the build from this tree |
 | `docs/DEVICE-TREE.md` | Walkthrough of the device tree and the decisions behind it |
 | `docs/RESEARCH.md` | Vendor firmware / kernel module analysis that informed the port |
+| `docs/FIRMWARE-EXTRACTION-METHOD.md` | How the vendor firmware image itself was unpacked (signature, decryption, UBI/FIT/SquashFS) — the pipeline that made `RESEARCH.md` possible |
 | `docs/TESTING.md` | What has and hasn't been tested, and how to test it |
 | `docs/KNOWN-ISSUES.md` | Open problems, unknowns, and licensing notes |
 | `docs/archer-ax23-v2-port-status.md` | Point-in-time status snapshot with evidence tags |
@@ -37,7 +38,9 @@ including upstream OpenWrt maintainers.
 **Included:** our own device tree, our own patches to the `rtl8365mb` driver, our own
 build/calibration scripts, documentation, and OEM-vs-OpenWrt comparisons — each
 conclusion tagged with where it came from (GPL source, vendor firmware inspection,
-upstream code, or our own testing).
+upstream code, or our own testing). This also includes a method-level description of
+how the vendor firmware image was unpacked (see `docs/FIRMWARE-EXTRACTION-METHOD.md`) —
+described at the mechanism level, without any recovered key material.
 
 **Not included, on purpose:** OEM firmware images, decrypted rootfs, partition dumps,
 config backups, any keys/credentials/tokens, personal data, or logs containing real
