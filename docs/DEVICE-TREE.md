@@ -71,9 +71,10 @@ applied; it will not build cleanly against a stock `rtl8365mb` driver.
   approximately 59 seconds after boot.
 - `ath11k-fw-memory-mode = 2` is set on **both** radios. This is required at 256MB of
   total RAM; higher-RAM devices on the same SoC can use a different mode.
-- Calibration data sourcing (NVMEM cells pointing at the `ART` partition offsets) is
-  handled in the hotplug script patch, not in the DTS itself — see the caldata patch
-  referenced in `KNOWN-ISSUES.md`.
+- The published ath11k caldata hotplug patch extracts calibration data directly from
+  `0:ART` at fixed offsets (`0x1000` for 2.4 GHz and `0x26800` for 5 GHz); it does not
+  use NVMEM cells declared in this DTS. Neither the offsets nor successful radio
+  calibration have been validated on real hardware — see `KNOWN-ISSUES.md` §2.
 
 ## NAND and sysupgrade
 
@@ -81,9 +82,11 @@ applied; it will not build cleanly against a stock `rtl8365mb` driver.
   trees. This is deliberate: sysupgrade needs write access to these partitions on this
   device (see `HARDWARE.md`'s partition table — both are listed as writable for this
   reason).
-- `tp_data` is marked as a candidate NVMEM source for the MAC address. The exact byte
-  offset within that partition has **not** been confirmed — see `KNOWN-ISSUES.md` §3.
-  The DTS declares the partition as a candidate, not a confirmed binding.
+- `tp_data` is declared as a NAND partition in the DTS, but the DTS does not declare
+  NVMEM cells for it. The caldata patch reads the MAC from
+  `/tmp/tp_data/default-mac`; the validity of that source on this device and the
+  derivation of the MAC addresses have not been confirmed on real hardware — see
+  `KNOWN-ISSUES.md` §3.
 
 ## What is intentionally left as a TODO in the DTS itself
 
