@@ -31,8 +31,9 @@ in mainline OpenWrt. This repo exists to document that work so it can be picked 
 reviewed, and eventually tested by anyone with the hardware and a UART connection -
 including upstream OpenWrt maintainers.
 
-<img src="docs/img/hardware-topology.svg" alt="Hardware topology: IPQ5018 SoC connected via SGMII to the RTL8367SC switch, which exposes 5 Ethernet ports; both radios hang off the SoC; NAND below" align="center">
-
+<div align="center">
+  <img src="docs/img/hardware-topology.svg" alt="Hardware topology: IPQ5018 SoC connected via SGMII to the RTL8367SC switch, which exposes 5 Ethernet ports; both radios hang off the SoC; NAND below">
+</div>
 
 ## Repository layout
 
