@@ -30,12 +30,14 @@ heavily with core count.
 ```sh
 git clone https://github.com/openwrt/openwrt.git
 cd openwrt
+git checkout 98b1185d039344553aaf8270d0661cfad4f0a54d
 ```
 
-This port was developed against a tree close to upstream `master` as of October 2026.
-If you hit build failures on a much newer or older tree, check whether the target
-subtarget (`qualcommax`/`ipq50xx`) or the `rtl8365mb` driver have changed shape
-upstream since.
+### Base revision and reproducibility
+
+- **Development base revision:** This port was developed and compiled against upstream OpenWrt commit [`98b1185d039344553aaf8270d0661cfad4f0a54d`](https://github.com/openwrt/openwrt/commit/98b1185d039344553aaf8270d0661cfad4f0a54d) ("mt76: update to Git HEAD (2026-10-08)", author Felix Fietkau), which is the upstream parent of the development checkpoint (`b2ab51c08c`).
+- Checking out this revision aligns the subtarget (`target/linux/qualcommax/ipq50xx`), kernel patches (`target/linux/generic/pending-6.18`), and build scripts with the state in which this port's patches and DTS were compiled.
+- **Reproducibility note:** While pinning this upstream commit eliminates core tree divergence, an end-to-end clean-room build from a fresh clone following only this guide has not yet been independently re-run. Host toolchain versions, feed package snapshots, and `.config` selections can introduce build-time differences.
 
 ## 2. Apply this port's patches
 
@@ -124,8 +126,9 @@ openwrt-qualcommax-ipq50xx-tplink_archer-ax23-v2.manifest
 
 None of these have been written to a physical device as of this writing. **Do not
 flash the `squashfs` images to real hardware before reading `TESTING.md`** — the
-recommended first step on real hardware is a non-persistent boot of the
-`initramfs-uImage.itb` over UART/TFTP, not a NAND write.
+proposed first step on real hardware is a non-persistent boot of the
+`initramfs-uImage.itb` over UART/TFTP (contingent on test H0 confirming that
+OEM U-Boot accepts interactive commands and network image loading), not a NAND write.
 
 ## Known build-time caveats
 

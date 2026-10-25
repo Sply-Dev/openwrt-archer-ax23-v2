@@ -1,4 +1,4 @@
-﻿# TP-Link Archer AX23 v2 - OpenWrt port (work in progress)
+# TP-Link Archer AX23 v2 - OpenWrt port (work in progress)
 
 This repository tracks an in-progress OpenWrt port for the **TP-Link Archer AX23 v2**
 (hardware version `v2.0`, Qualcomm IPQ5018 / 256MB RAM - not to be confused with the
@@ -11,9 +11,12 @@ AX23 v1, which is MediaTek MT7621-based and already officially supported by Open
 > current, evidence-tagged state of the port.
 
 > **Do not flash any image from this tree to a physical device.** `sysupgrade`
-> support is not implemented yet (see `docs/KNOWN-ISSUES.md` and
-> `docs/TESTING.md`) and attempting it can brick the router. The build
-> artifacts here are for non-persistent, UART/TFTP-based testing only.
+> support is not implemented yet (see [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md) and
+> [`docs/TESTING.md`](docs/TESTING.md)) and attempting it can brick the router. The build
+> artifacts here are intended only for proposed non-persistent testing (e.g.
+> RAM boot via UART/TFTP) once U-Boot console and network capabilities are verified
+> on physical hardware. Neither interactive U-Boot console access nor network image
+> loading has been demonstrated on this device yet — see [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Why this exists
 

@@ -51,8 +51,9 @@ being meaningful — not a substitute for one.
 
 Full list with pass criteria in `archer-ax23-v2-port-status.md` section 3 (tests
 H0–H9+). Ground rules for all of them: **no firmware is written to the router without
-explicit authorization**, and the early tests are designed to be non-persistent
-(booting from RAM over UART/TFTP, not flashing NAND).
+explicit authorization**, and the early tests are planned as non-persistent procedures
+(attempting to boot from RAM over UART/TFTP rather than flashing NAND, contingent on
+test H0 confirming that OEM U-Boot accepts interactive commands and network loading).
 
 Recommended order, since each depends on the previous one succeeding:
 

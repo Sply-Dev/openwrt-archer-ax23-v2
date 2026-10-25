@@ -7,34 +7,37 @@ are the same as elsewhere in this repository.
 
 ## Base and references
 
-The DTS is built on `ipq5018.dtsi` + `ipq5018-ess.dtsi` + `ipq5018-nss.dtsi` +
-`ipq5018-qcn6122.dtsi`, the same base used by devices already supported upstream on
-the same SoC.
+The DTS is built on `ipq5018.dtsi` + `ipq5018-ess.dtsi` + `ipq5018-qcn6122.dtsi`,
+following the subtarget base used by devices already supported upstream on the same SoC.
+(Note: `ipq5018-nss.dtsi` is not included in this device tree; NSS hardware acceleration
+regions are not configured here).
 
 Two existing OpenWrt device trees were used as direct references:
 
 - **EX511 v2** (`kuncy7/openwrt-nss-edma`, branch `ipq50xx-nss`) — same SoC, same RAM
-  size, same NSS/ath11k/QCN6102 configuration. Used as the primary template for the
-  NSS region, memory layout, and radio nodes.
+  size (256MB), same ath11k/QCN6102 radio configuration. Used as the template for the
+  radio nodes and memory-saving parameters (`ath11k-fw-memory-mode = 2`, QCN6102 boot-args).
 - **AX55 v1** (`kuncy7/openwrt-ax55-v1`) — closest available reference for a TP-Link
   IPQ50xx device using an RTL8367-family switch over SGMII with a `tp_data`-sourced
-  MAC address. Used as the template for the switch node, SerDes/SGMII configuration,
-  and the `tp_data` MAC convention also used in the caldata patch (see
+  MAC address. Used as the template for SerDes/SGMII configuration, the general switch
+  binding pattern, and the `tp_data` MAC convention also used in the caldata patch (see
   `KNOWN-ISSUES.md` for the caldata patch itself).
 
 Neither reference device is identical to the AX23 v2 — both required adaptation, not
 a straight copy. Where a value was copied from a reference rather than derived from
 this device's own OEM data, that is noted below.
 
-## Memory and NSS region
+## Memory and bootargs
 
 `256MB` total RAM (see `HARDWARE.md`) is below what most `ipq50xx` devices in the
-upstream tree ship with, which directly shapes two choices:
+upstream tree ship with (many have 512MB or 1GB). In this DTS:
 
-- `nss_region` is sized at 8MB, scaled down from larger-RAM reference devices.
-- `coherent_pool` is set to 512K.
+- `chosen { bootargs-append = " root=/dev/ubiblock0_1 coherent_pool=2M"; };` sets the
+  coherent DMA pool to 2MB. This records the configured boot argument; its runtime
+  impact has not been validated on physical hardware.
+- No explicit NSS memory reservation (`nss_region`) is declared.
 
-This RAM size is also the reason this device is not expected to be accepted into
+This constrained RAM size is also the reason this device is not expected to be accepted into
 OpenWrt mainline in its current form — see `KNOWN-ISSUES.md` §6.
 
 ## Ethernet
@@ -44,20 +47,20 @@ OpenWrt mainline in its current form — see `KNOWN-ISSUES.md` §6.
 - `gmac1` is configured as SGMII, 1G, `fixed-link`, matching the OEM switch
   configuration's CPU port (port 6, tagged).
 - `uniphy0` uses `REFCLK_25MHZ`.
-- `mdio0` is enabled with no static child nodes populated — MDIO access to the switch
-  is handled by the CMN PLL path rather than static device-tree PHY nodes, following
-  the AX55 v1 reference.
+- `mdio0` is enabled with no static child nodes populated.
+- `mdio1` is enabled using pin controller `mdio1_pins` (GPIO36 MDC, GPIO37 MDIO),
+  where the switch node `switch@1d` is attached.
 
 ### Switch node
 
-The RTL8367SC is described using the upstream `realtek,rtl8365mb` binding:
+The RTL8367SC is described under `&mdio1` using the upstream `realtek,rtl8365mb` binding:
 
-- `reg = 29` (switch device address)
+- `reg = 29` (switch MDIO address on MDIO1; physical access has not been confirmed)
 - `reset-gpios` = GPIO33, matching the shared LED/reset GPIO in `HARDWARE.md`
-- `realtek,headerless-cpu-port` — set based on the AX55 v1 reference; **not
-  independently confirmed against this device's physical behavior**
-- Individual PHY nodes for `port@0`–`port@4` (the four LAN ports plus WAN), CPU port
-  at `port@6`
+- Internal MDIO bus (`realtek,smi-mdio`) declaring internal PHYs `ethernet-phy@0` through `@4`
+- Individual port nodes for `port@0`–`port@4` (the four LAN ports plus WAN), and CPU port
+  at `port@6` linked to `&gmac1` over SGMII (fixed-link 1G)
+- Note: `realtek,headerless-cpu-port` is **not** set in this DTS.
 
 The "family D" (RTL8367D) switch support itself is not upstream — it is provided by
 the eight local patches in `target/linux/generic/pending-6.18/777-01` through

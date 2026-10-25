@@ -165,5 +165,5 @@ physical unit, via OpenWrt forum thread `t/249493`. Items marked `[REPORTED]` ab
 reflect that collaboration; everything else was derived without physical hardware
 access and should be treated as unconfirmed until independently verified.
 
-The tl8365mb\ switch driver patches referenced throughout this document were
-not written by this project -- see \docs/CREDITS.md\ for their authors.
+The rtl8365mb switch driver patches referenced throughout this document were
+not written by this project — see [CREDITS.md](CREDITS.md) for their authors.
