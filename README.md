@@ -1,6 +1,6 @@
 # TP-Link Archer AX23 v2 - OpenWrt port (work in progress)
 
-[![License: GPL v2](https://img.shields.io/badge/license-GPL--2.0-6E40C9.svg)](LICENSE)
+[![License: GPL v2](https://img.shields.io/badge/license-GPL--2.0.svg)](LICENSE)
 [![OpenWrt target: qualcommax/ipq50xx](https://img.shields.io/badge/OpenWrt-qualcommax%2Fipq50xx-0088CC?logo=openwrt&logoColor=white)](docs/HARDWARE.md)
 [![Status: untested on hardware](https://img.shields.io/badge/status-untested%20on%20hardware-D97706.svg)](docs/archer-ax23-v2-port-status.md)
 
