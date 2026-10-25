@@ -57,7 +57,7 @@ done
 Apply the ath11k calibration-data patch:
 
 ```sh
-patch -p1 < /path/to/ax23v2-public/target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/0001-add-tplink-archer-ax23-v2-caldata.patch
+patch -p1 < /path/to/ax23v2-public/patches/0001-add-tplink-archer-ax23-v2-caldata.patch
 ```
 
 Add the device definition block. The content is in

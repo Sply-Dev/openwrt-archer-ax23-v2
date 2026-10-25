@@ -9,6 +9,8 @@ Last reviewed: 2026-10-17.
 > document should be read as hardware validation. A QEMU boot would not change that: it
 > does not exercise this SoC, switch, NAND or radios.
 
+> **Snapshot Note:** This document is an audit snapshot of the private development build tree (`/workspace/openwrt`) recorded on 2026-10-17. References to untracked files, backups, logs, or repository anomalies in section R17 and Appendix A reflect that private working environment at review time and do not exist in this clean public repository.
+
 ## Scope and evidence conventions
 
 Baseline reviewed:

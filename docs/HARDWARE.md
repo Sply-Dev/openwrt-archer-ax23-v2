@@ -164,3 +164,6 @@ with physical confirmation by **vram**, a community member with UART access to a
 physical unit, via OpenWrt forum thread `t/249493`. Items marked `[REPORTED]` above
 reflect that collaboration; everything else was derived without physical hardware
 access and should be treated as unconfirmed until independently verified.
+
+The tl8365mb\ switch driver patches referenced throughout this document were
+not written by this project -- see \docs/CREDITS.md\ for their authors.

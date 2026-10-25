@@ -17,8 +17,9 @@
  *   - OEM firmware 1.1.2 rootfs extraction + decryption
  *   - Stock kernel module analysis (qca-ssdk.ko ELF/L2P table/SerDes)
  *   - U-Boot DTB ax23_mp02.1.dtb extracted from kernel FIT image
- *   - Physical UART access logs
- *   - partition_config/partition-table from rootfs
+ *   - OEM U-Boot DTB and UART logs reported by community member " vram\n * (physical hardware access, not this project's own) -- OpenWrt forum
+ * thread t/249493, see docs/HARDWARE.md and docs/CREDITS.md
+ * - partition_config/partition-table from rootfs
  */
 
 /dts-v1/;

@@ -1,7 +1,7 @@
-# Trecho extraido de target/linux/qualcommax/image/ipq50xx.mk
-# Este arquivo contem apenas a definicao do Device/tplink_archer-ax23-v2.
-# Na arvore real do OpenWrt, este bloco se encaixa em target/linux/qualcommax/image/ipq50xx.mk
-# (apos a definicao de mercusys_mr80x-v2 e antes de tplink_archer-ax55-v1).
+# Snippet extracted from target/linux/qualcommax/image/ipq50xx.mk
+# This file contains only the Device/tplink_archer-ax23-v2 definition.
+# In the OpenWrt tree, this block belongs in target/linux/qualcommax/image/ipq50xx.mk
+# (after mercusys_mr80x-v2 and before tplink_archer-ax55-v1).
 
 define Device/tplink_archer-ax23-v2
 	$(call Device/FitImageLzma)
@@ -11,7 +11,7 @@ define Device/tplink_archer-ax23-v2
 	DEVICE_VARIANT := v2
 	DEVICE_DTS_CONFIG := config@mp02.1
 	SOC := ipq5018
-        DEVICE_DTS := ipq5018-archer-ax23-v2
+	DEVICE_DTS := ipq5018-archer-ax23-v2
 	BLOCKSIZE := 128k
 	PAGESIZE := 2048
 	IMAGE_SIZE := 54784k
