@@ -1,0 +1,46 @@
+# Build artifacts / logs — never belong in this tree
+build.log
+kernel_compile.log
+build.exit
+*.log
+
+# Core dumps
+core
+core.*
+
+# Backup / editor artifacts
+*.bak
+*.orig
+*.swp
+*~
+.config.backup*
+
+# Firmware / RE artifacts — this repo documents findings, never ships them
+*.bin
+*.ko
+*.squashfs
+*.ubi
+*.img
+*.dec
+*.enc
+*.fit
+*.lzma
+*.dtb
+ax23-images-*/
+rootfs/
+firmware/
+decrypted/
+
+# Vendor source dumps / GPL archives (reference material, not redistributed here)
+GPL_*.tar.gz
+*.tar.gz
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local env
+*.env
+.env.local

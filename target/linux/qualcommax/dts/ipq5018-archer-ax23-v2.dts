@@ -1,0 +1,445 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+/*
+ * Device tree for TP-Link Archer AX23 v2
+ *
+ * SoC:    Qualcomm IPQ5018 (IPQ0509), Cortex-A53 dual-core
+ * RAM:    256 MB DDR3 (CDT: AP-MP02.1_128M16_DDR3_LM256)
+ * Flash:  SPI-NAND 128 MB, dual-image (rootfs + rootfs_1)
+ * Switch: RTL8367SC (chip ID 0x6642, family RTL8367D)
+ *         SGMII trunk on GMAC1, reset GPIO33
+ * WiFi:   IPQ5018 internal (ath11k) 2.4 GHz
+ *         QCN6102 (qcn6122 fw) 5 GHz via PCIe
+ * UART:   GPIO28 (RX) / GPIO29 (TX), 115200 8N1, 1.8V
+ *         Header JP1 — level-shifter SMDs removed by TP-Link
+ *
+ * Hardware confirmed via:
+ *   - GPL source analysis (GPL_AX23v2.tar.gz)
+ *   - OEM firmware 1.1.2 rootfs extraction + decryption
+ *   - Stock kernel module analysis (qca-ssdk.ko ELF/L2P table/SerDes)
+ *   - U-Boot DTB ax23_mp02.1.dtb extracted from kernel FIT image
+ *   - Physical UART access logs
+ *   - partition_config/partition-table from rootfs
+ */
+
+/dts-v1/;
+
+#include "ipq5018.dtsi"
+#include "ipq5018-ess.dtsi"
+#include "ipq5018-qcn6122.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/net/qca-uniphy.h>
+
+/ {
+	model = "TP-Link Archer AX23 v2";
+	compatible = "tplink,archer-ax23-v2", "qcom,ipq5018";
+
+	aliases {
+		serial0 = &blsp1_uart1;
+		ethernet1 = &gmac1;
+		label-mac-device = <&gmac1>;
+		led-boot = &led_power;
+		led-failsafe = &led_power;
+		led-running = &led_power;
+		led-upgrade = &led_power;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+		bootargs-append = " root=/dev/ubiblock0_1 coherent_pool=2M";
+	};
+
+	keys {
+		compatible = "gpio-keys";
+		pinctrl-0 = <&button_pins>;
+		pinctrl-names = "default";
+
+		reset {
+			label = "reset";
+			gpios = <&tlmm 14 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_RESTART>;
+			debounce-interval = <60>;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+		pinctrl-0 = <&led_pins>;
+		pinctrl-names = "default";
+
+		led_power: led-power {
+			function = LED_FUNCTION_POWER;
+			color = <LED_COLOR_ID_WHITE>;
+			gpios = <&tlmm 10 GPIO_ACTIVE_HIGH>;
+			default-state = "on";
+		};
+
+		led-wan-orange {
+			label = "amber:wan";
+			gpios = <&tlmm 12 GPIO_ACTIVE_HIGH>;
+		};
+
+		led-wan {
+			label = "white:wan";
+			gpios = <&tlmm 13 GPIO_ACTIVE_HIGH>;
+		};
+
+		led-wps {
+			function = LED_FUNCTION_WPS;
+			color = <LED_COLOR_ID_WHITE>;
+			gpios = <&tlmm 22 GPIO_ACTIVE_HIGH>;
+		};
+
+		led-lan {
+			function = LED_FUNCTION_LAN;
+			color = <LED_COLOR_ID_WHITE>;
+			gpios = <&tlmm 32 GPIO_ACTIVE_HIGH>;
+		};
+
+		led-wifi-5g {
+			label = "white:wlan5g";
+			gpios = <&tlmm 11 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "phy0tpt";
+		};
+	};
+};
+
+&sleep_clk {
+	clock-frequency = <32000>;
+};
+
+&xo_board_clk {
+	clock-div = <4>;
+	clock-mult = <1>;
+};
+
+&crypto { status = "okay"; };
+&cryptobam { status = "okay"; };
+&prng { status = "okay"; };
+&qfprom { status = "okay"; };
+&qpic_bam { status = "okay"; };
+&watchdog { status = "okay"; };
+
+&blsp1_uart1 {
+	status = "okay";
+	pinctrl-0 = <&serial_pins>;
+	pinctrl-names = "default";
+};
+
+&gmac0 {
+	status = "disabled";
+};
+
+&gmac1 {
+	status = "okay";
+	phy-mode = "sgmii";
+
+	fixed-link {
+		speed = <1000>;
+		full-duplex;
+	};
+};
+
+&uniphy0 {
+	status = "okay";
+
+	assigned-clocks = <&uniphy0 UNIPHY_CLK_REF>;
+	assigned-clock-rates = <UNIPHY_REFCLK_25MHZ>;
+};
+
+&mdio0 {
+	status = "okay";
+};
+
+&mdio1 {
+	status = "okay";
+	pinctrl-0 = <&mdio1_pins>;
+	pinctrl-names = "default";
+
+	switch@1d {
+		compatible = "realtek,rtl8365mb";
+		reg = <29>;
+
+		reset-gpios = <&tlmm 33 GPIO_ACTIVE_LOW>;
+
+		mdio {
+			compatible = "realtek,smi-mdio";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			ax23_phy0: ethernet-phy@0 {
+				reg = <0>;
+			};
+
+			ax23_phy1: ethernet-phy@1 {
+				reg = <1>;
+			};
+
+			ax23_phy2: ethernet-phy@2 {
+				reg = <2>;
+			};
+
+			ax23_phy3: ethernet-phy@3 {
+				reg = <3>;
+			};
+
+			ax23_phy4: ethernet-phy@4 {
+				reg = <4>;
+			};
+		};
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				label = "wan";
+				phy-handle = <&ax23_phy0>;
+			};
+
+			port@1 {
+				reg = <1>;
+				label = "lan1";
+				phy-handle = <&ax23_phy1>;
+			};
+
+			port@2 {
+				reg = <2>;
+				label = "lan2";
+				phy-handle = <&ax23_phy2>;
+			};
+
+			port@3 {
+				reg = <3>;
+				label = "lan3";
+				phy-handle = <&ax23_phy3>;
+			};
+
+			port@4 {
+				reg = <4>;
+				label = "lan4";
+				phy-handle = <&ax23_phy4>;
+			};
+
+			port@6 {
+				reg = <6>;
+				label = "cpu";
+				ethernet = <&gmac1>;
+				phy-mode = "sgmii";
+
+				fixed-link {
+					speed = <1000>;
+					full-duplex;
+				};
+			};
+		};
+	};
+};
+
+&q6v5_wcss {
+	boot-args = <0x2 0x4 0x2 0x1b 0x0 0x0>;
+};
+
+&wifi {
+	status = "okay";
+	qcom,rproc = <&q6_wcss_pd1>;
+	qcom,ath11k-calibration-variant = "TP-Link-Archer-AX23-v2";
+	qcom,ath11k-fw-memory-mode = <2>;
+	qcom,bdf-addr = <0x4c400000>;
+};
+
+&wifi1 {
+	status = "okay";
+	qcom,rproc = <&q6_wcss_pd2>;
+	qcom,userpd-subsys-name = "q6v5_wcss_userpd2";
+	qcom,ath11k-calibration-variant = "TP-Link-Archer-AX23-v2";
+	qcom,ath11k-fw-memory-mode = <2>;
+	qcom,bdf-addr = <0x4d100000>;
+	qcom,m3-dump-addr = <0x4df00000>;
+};
+
+&blsp1_spi1 {
+	status = "disabled";
+};
+
+&qpic_nand {
+	status = "okay";
+	pinctrl-0 = <&qpic_pins>;
+	pinctrl-names = "default";
+
+	nand@0 {
+		compatible = "spi-nand";
+		reg = <0>;
+		nand-ecc-engine = <&qpic_nand>;
+		nand-ecc-strength = <4>;
+		nand-ecc-step-size = <512>;
+		nand-bus-width = <8>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "0:SBL1";
+				reg = <0x000000 0x080000>;
+				read-only;
+			};
+
+			partition@80000 {
+				label = "0:MIBIB";
+				reg = <0x080000 0x080000>;
+				read-only;
+			};
+
+			partition@100000 {
+				label = "0:BOOTCONFIG";
+				reg = <0x100000 0x040000>;
+			};
+
+			partition@140000 {
+				label = "0:BOOTCONFIG1";
+				reg = <0x140000 0x040000>;
+			};
+
+			partition@180000 {
+				label = "0:QSEE";
+				reg = <0x180000 0x100000>;
+				read-only;
+			};
+
+			partition@280000 {
+				label = "0:DEVCFG";
+				reg = <0x280000 0x040000>;
+				read-only;
+			};
+
+			partition@2c0000 {
+				label = "0:CDT";
+				reg = <0x2c0000 0x040000>;
+				read-only;
+			};
+
+			partition@300000 {
+				label = "0:APPSBLENV";
+				reg = <0x300000 0x080000>;
+			};
+
+			partition@380000 {
+				label = "0:APPSBL";
+				reg = <0x380000 0x140000>;
+				read-only;
+			};
+
+			partition@4c0000 {
+				label = "0:ART";
+				reg = <0x4c0000 0x100000>;
+				read-only;
+			};
+
+			partition@5c0000 {
+				label = "0:TRAINING";
+				reg = <0x5c0000 0x080000>;
+				read-only;
+			};
+
+			partition@640000 {
+				label = "rootfs";
+				reg = <0x640000 0x3580000>;
+			};
+
+			partition@3bc0000 {
+				label = "rootfs_1";
+				reg = <0x3bc0000 0x3580000>;
+			};
+
+			partition@7140000 {
+				label = "tp_data";
+				reg = <0x7140000 0x840000>;
+				read-only;
+			};
+
+			partition@7980000 {
+				label = "radio";
+				reg = <0x7980000 0x440000>;
+				read-only;
+			};
+
+			partition@7dc0000 {
+				label = "data";
+				reg = <0x7dc0000 0x080000>;
+			};
+		};
+	};
+};
+
+&tlmm {
+	button_pins: button-pins {
+		pins = "gpio14";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+
+	led_pins: led-pins {
+		pins = "gpio10", "gpio11", "gpio12", "gpio13",
+		       "gpio22", "gpio32";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-down;
+	};
+
+	mdio1_pins: mdio1-pins {
+		mdc {
+			pins = "gpio36";
+			function = "mdc";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+		mdio {
+			pins = "gpio37";
+			function = "mdio";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+	};
+
+	qpic_pins: qpic-pins {
+		data {
+			pins = "gpio4", "gpio5", "gpio6", "gpio7";
+			function = "qspi_data";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+		cs {
+			pins = "gpio8";
+			function = "qspi_cs";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+		clk {
+			pins = "gpio9";
+			function = "qspi_clk";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+	};
+
+	serial_pins: serial-pins {
+		tx-pins {
+			pins = "gpio29";
+			function = "blsp0_uart1";
+			drive-strength = <8>;
+			bias-disable;
+		};
+		rx-pins {
+			pins = "gpio28";
+			function = "blsp0_uart1";
+			drive-strength = <8>;
+			bias-disable;
+		};
+	};
+};

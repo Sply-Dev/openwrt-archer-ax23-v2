@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Sply-Dev <206945494+Sply-Dev@users.noreply.github.com>
+Date: Fri, 24 Oct 2026 00:00:00 +0000
+Subject: [PATCH] qualcommax: ipq50xx: add ath11k caldata for Archer AX23 v2
+
+The AX23 v2 (IPQ5018) has two ath11k radios:
+  - 2.4 GHz: IPQ5018 internal radio, calibration at 0:ART offset 0x1000
+  - 5 GHz:   QCN6102/QCN6122 over PCIe, calibration at 0:ART offset 0x26800
+
+Both cases read the base MAC from /tmp/tp_data/default-mac (the tp_data
+NAND partition, same pattern as Archer AX55 v1 and other IPQ50xx TP-Link
+devices in this tree).
+
+MAC patching offsets follow the same convention as the AX55 v1:
+  2.4 GHz: label_mac - 1
+  5 GHz:   label_mac - 2
+
+Signed-off-by: Sply-Dev <206945494+Sply-Dev@users.noreply.github.com>
+---
+ .../etc/hotplug.d/firmware/11-ath11k-caldata        | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+--- a/target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
++++ b/target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
+@@ -65,6 +65,13 @@ case "$FIRMWARE" in
+ 		ath11k_set_macflag
+ 		ath11k_remove_regdomain
+ 		;;
++	tplink,archer-ax23-v2)
++		caldata_extract "0:ART" 0x1000 0x20000
++		label_mac=$(get_mac_binary "/tmp/tp_data/default-mac" 0)
++		[ -n "$label_mac" ] && ath11k_patch_mac "$(macaddr_add "$label_mac" -1)" 0
++		ath11k_set_macflag
++		ath11k_remove_regdomain
++		;;
+ 	tplink,eap650-outdoor-v1)
+ 		caldata_from_file "/tmp/factory_data/radio" 0 0x20000
+ 		label_mac=$(get_mac_binary /tmp/factory_data/default-mac 0)
+@@ -134,6 +141,13 @@ case "$FIRMWARE" in
+ 		[ -n "$label_mac" ] && ath11k_patch_mac "$(macaddr_add "$label_mac" -2)" 0
+ 		ath11k_set_macflag
+ 		;;
++	tplink,archer-ax23-v2)
++		caldata_extract "0:ART" 0x26800 0x20000
++		label_mac=$(get_mac_binary "/tmp/tp_data/default-mac" 0)
++		[ -n "$label_mac" ] && ath11k_patch_mac "$(macaddr_add "$label_mac" -2)" 0
++		ath11k_set_macflag
++		ath11k_remove_regdomain
++		;;
+ 	tplink,archer-ax55-v1)
+ 		caldata_extract "0:ART" 0x26800 0x20000
+ 		label_mac=$(get_mac_binary "/tmp/tp_data/default-mac" 0)
