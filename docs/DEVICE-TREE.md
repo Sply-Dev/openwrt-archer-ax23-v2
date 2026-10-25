@@ -33,8 +33,9 @@ this device's own OEM data, that is noted below.
 upstream tree ship with (many have 512MB or 1GB). In this DTS:
 
 - `chosen { bootargs-append = " root=/dev/ubiblock0_1 coherent_pool=2M"; };` sets the
-  coherent DMA pool to 2MB. This records the configured boot argument; its runtime
-  impact has not been validated on physical hardware.
+  root device to `/dev/ubiblock0_1` and the coherent DMA pool to 2MB. This records
+  the configured boot argument; its runtime impact has not been validated on
+  physical hardware.
 - No explicit NSS memory reservation (`nss_region`) is declared.
 
 This constrained RAM size is also the reason this device is not expected to be accepted into
