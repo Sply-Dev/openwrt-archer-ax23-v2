@@ -20,7 +20,7 @@
  *   - OEM U-Boot DTB and UART logs reported by community member vram
  *     (physical hardware access, not this project's own) -- OpenWrt forum
  *     thread t/249493, see docs/HARDWARE.md and docs/CREDITS.md
- * - partition_config/partition-table from rootfs
+ *   - partition_config/partition-table from rootfs
  */
 
 /dts-v1/;
