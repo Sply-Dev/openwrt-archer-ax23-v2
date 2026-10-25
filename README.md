@@ -2,7 +2,6 @@
 
 [![License: GPL v2](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](LICENSE)
 [![OpenWrt target: qualcommax/ipq50xx](https://img.shields.io/badge/OpenWrt-qualcommax%2Fipq50xx-1E7D32?logo=openwrt&logoColor=white)](docs/HARDWARE.md)
-[![Status: untested on hardware](https://img.shields.io/badge/status-untested%20on%20hardware-orange.svg)](docs/archer-ax23-v2-port-status.md)
 [![Target: qualcommax/ipq50xx](https://img.shields.io/badge/target-qualcommax%2Fipq50xx-lightgrey.svg)](docs/HARDWARE.md)
 
 This repository tracks an in-progress OpenWrt port for the **TP-Link Archer AX23 v2**
