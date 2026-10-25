@@ -1,5 +1,9 @@
 # TP-Link Archer AX23 v2 - OpenWrt port (work in progress)
 
+[![License: GPL v2](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](LICENSE)
+[![Status: untested on hardware](https://img.shields.io/badge/status-untested%20on%20hardware-orange.svg)](docs/archer-ax23-v2-port-status.md)
+[![Target: qualcommax/ipq50xx](https://img.shields.io/badge/target-qualcommax%2Fipq50xx-lightgrey.svg)](docs/HARDWARE.md)
+
 This repository tracks an in-progress OpenWrt port for the **TP-Link Archer AX23 v2**
 (hardware version `v2.0`, Qualcomm IPQ5018 / 256MB RAM - not to be confused with the
 AX23 v1, which is MediaTek MT7621-based and already officially supported by OpenWrt).
@@ -16,7 +20,7 @@ AX23 v1, which is MediaTek MT7621-based and already officially supported by Open
 > artifacts here are intended only for proposed non-persistent testing (e.g.
 > RAM boot via UART/TFTP) once U-Boot console and network capabilities are verified
 > on physical hardware. Neither interactive U-Boot console access nor network image
-> loading has been demonstrated on this device yet — see [`docs/TESTING.md`](docs/TESTING.md).
+> loading has been demonstrated on this device yet - see [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Why this exists
 
@@ -26,6 +30,11 @@ switch (Realtek RTL8367SC/RTL8365-family) over SGMII, which is not yet wired up 
 in mainline OpenWrt. This repo exists to document that work so it can be picked up,
 reviewed, and eventually tested by anyone with the hardware and a UART connection -
 including upstream OpenWrt maintainers.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/hardware-topology-dark.svg">
+  <img src="docs/img/hardware-topology.svg" alt="Hardware topology: IPQ5018 SoC connected via SGMII to the RTL8367SC switch, which exposes 5 Ethernet ports; both radios hang off the SoC; NAND below">
+</picture>
 
 ## Repository layout
 
