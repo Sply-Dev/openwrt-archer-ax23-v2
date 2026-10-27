@@ -103,7 +103,7 @@ Not checked in this review: `dtc` warning output, rootfs/package contents inside
 repository, so no QEMU result is claimed), and the origin of the root-owned `core.8` / `core.9`
 and `<stdin>.s` files.
 
-## 2.1 Driver source cross-check (ath11k, this build tree) — added 2026-10-27
+### 2.1 Driver source cross-check (ath11k, this build tree) — added 2026-10-27
 
 Not in the original review scope (2026-10-17). Read directly from
 `build_dir/target-aarch64_cortex-a53_musl/linux-qualcommax_ipq50xx/mac80211-regular/backports-7.2/drivers/net/wireless/ath/ath11k/{core,qmi}.c`
