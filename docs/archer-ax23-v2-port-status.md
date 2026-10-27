@@ -103,6 +103,30 @@ Not checked in this review: `dtc` warning output, rootfs/package contents inside
 repository, so no QEMU result is claimed), and the origin of the root-owned `core.8` / `core.9`
 and `<stdin>.s` files.
 
+## 2.1 Driver source cross-check (ath11k, this build tree) — added 2026-10-27
+
+Not in the original review scope (2026-10-17). Read directly from
+`build_dir/target-aarch64_cortex-a53_musl/linux-qualcommax_ipq50xx/mac80211-regular/backports-7.2/drivers/net/wireless/ath/ath11k/{core,qmi}.c`
+in this tree, at the version this build was compiled against. `[SOURCE]`
+
+| Check | Finding |
+|---|---|
+| Does `qcom,ath11k-fw-memory-mode` have any effect? | Yes. `core.c` (~line 2698) reads the property and overwrites `ab->hw_params.fw_mem_mode`, which `qmi.c:3389` later copies into `ab->qmi.target_mem_mode`. That value's only use in the driver is `req.mem_cfg_mode` in the QMI firmware-memory-request (`qmi.c:1723`) — it is forwarded to firmware, not used to size any host-side (Linux) buffer or ring. This contradicts a claim made in a public OpenWrt PR discussion (`openwrt/openwrt#21495`) that this property "effect nothing about memory usage"; in this tree's driver version it clearly does something, though what firmware does with mode 2 internally was not and cannot be checked from source alone. |
+| Does the DTS need `qcom,caldb-addr`? | Not necessarily. `qmi.c` only reads `qcom,caldb-addr` when `ath11k_core_coldboot_cal_support()` is true, which in turn reads `hw_params.coldboot_cal_mm` (per-SoC, compile-time). The QCN6122 entry in this driver version has `coldboot_cal_mm = false`; the IPQ5018 entry's value was not located in this review. Absence of `caldb-addr` in our DTS is therefore not necessarily a gap. `[OPEN]` for the IPQ5018 radio specifically. |
+| `qcom,bdf-addr` / `qcom,m3-dump-addr` format | Confirmed as a single `u32`, not an array — `of_property_read_u32()` in both `qmi.c:2077` (BDF) and `qmi.c:2115` (M3 dump). Our DTS values are in this format. |
+| Per-SoC hardcoded defaults (`hw_params`, used only if the DTS property is absent) | IPQ5018 (`ATH11K_HW_IPQ5018_HW10`, `core.c:664`): `bdf_addr = 0x4BA00000`, `board_size = 256*1024`, `cal_offset = 128*1024`. QCN6122 (`ATH11K_HW_QCN6122_HW10`, `core.c:~930`): `bdf_addr = 0x4D200000`, `fw_mem_mode = 1` (default), `m3_fw_support = false` (default), same `board_size`/`cal_offset`. |
+| Our DTS values vs. driver defaults | IPQ5018: `0x4c400000` (ours) vs `0x4BA00000` (driver default) — different, DTS value wins per the `of_property_read_u32` fallback logic above. QCN6122: `0x4d100000` (ours) vs `0x4D200000` (driver default) — same pattern. Neither pairing was found documented as an intentional choice anywhere in-tree; origin of our two values is `[OPEN]`. |
+| Do our two BDF regions overlap each other or exceed `q6_region`? | No overlap: `0x4c400000`-`0x4c440000` (IPQ5018 BDF, 256 KiB) and `0x4d100000`-`0x4d140000` (QCN6122 BDF, 256 KiB) are well separated, both inside `q6_region` (`0x4b000000`-`0x4e000000`, 48 MiB, set by `ipq5018-qcn6122.dtsi`). `m3-dump-addr = 0x4df00000` on `wifi1` sits close to the top of `q6_region` (0x100000 / 1 MiB of margin to `0x4e000000`); its actual size is firmware-reported at runtime (`ab->qmi.target_mem[i].size`, not a compile-time constant), so whether it fits could not be confirmed from source. `[OPEN]`. |
+| Is `smallbuffers` (upstream PR `openwrt/openwrt#21495`) present in this tree? | No. `grep` for `ATH11K_SMALLBUFFERS`/`ath11k-smallbuffers`/`ath11k-ahb-smallbuffers` in `package/kernel/mac80211/ath.mk` returns nothing. `Device/tplink_archer-ax23-v2`'s `DEVICE_PACKAGES` does not list any ath11k kmod explicitly, so the regular `kmod-ath11k`/`kmod-ath11k-ahb` from `qualcommax` `DEFAULT_PACKAGES` is what would ship. The PR's own measurement on a comparable board (IPQ5018+QCN6122, 256 MB, PZ-L8) showed available RAM going from ~10 MB to ~68 MB with the smallbuffers variant; whether the same gain applies here is untested and the PR is unmerged upstream as of this review. |
+
+**R18** (new, severity: informational). The `fw-memory-mode = <2>` setting on both radios in this
+DTS appears to be untested territory even relative to the public reference material reviewed:
+a real IPQ5018+QCN6122/256 MB board (PZ-L8, `openwrt/openwrt#21495` thread) was observed in a
+real boot log running `fw_mem_mode = 1` (the driver default for that SoC), not mode 2. No
+publicly reviewed report of mode 2 working on this exact radio pair was found. This does not
+mean mode 2 is wrong — the earlier project rationale was that mode 2 is required for 256 MB —
+but it is currently an unverified choice, not a confirmed-safe one. `[OPEN]`
+
 ## 3. Pending tests on real hardware
 
 Status of every item: **not run**. Ground rules (`[REPORTED]` project rules): no firmware is
