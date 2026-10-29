@@ -73,8 +73,8 @@ vendor-supplied kernel module.
 
 | Component | Status |
 |---|---|
-| Boot (initramfs/sysupgrade build) | Builds successfully; not booted on hardware |
-| Ethernet switch (RTL8367SC) | Driver patches written; SGMII link to CPU port not yet validated |
+| Boot (initramfs/sysupgrade build) | Builds successfully; not booted on hardware. A/B boot is selected via `fw_setenv tp_boot_idx` (from vendor GPL); the sysupgrade logic for this is not implemented or tested yet |
+| Ethernet switch (RTL8367 family D) | Chip ID 0x6642 inferred from static analysis, not read from the physical unit. Driver patches are based on an earlier revision of the net-next family D series (not yet rebased on v6). Trunk mode in the DTS (2500base-x + pause) is an unverified hypothesis; the stock DTB shows SGMII 1G. Link to CPU port not validated |
 | 2.4GHz radio (IPQ5018 internal) | Caldata hotplug hook written; board data / ART offsets unvalidated; not tested |
 | 5GHz radio (QCN6102) | Caldata hotplug hook written; board data / ART offsets unvalidated; not tested |
 | LEDs / buttons | GPIO map known from OEM DTB; polarity not confirmed |
