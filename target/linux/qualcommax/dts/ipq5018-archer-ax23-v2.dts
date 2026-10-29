@@ -5,8 +5,11 @@
  * SoC:    Qualcomm IPQ5018 (IPQ0509), Cortex-A53 dual-core
  * RAM:    256 MB DDR3 (CDT: AP-MP02.1_128M16_DDR3_LM256)
  * Flash:  SPI-NAND 128 MB, dual-image (rootfs + rootfs_1)
- * Switch: RTL8367SC (chip ID 0x6642, family RTL8367D)
- *         SGMII trunk on GMAC1, reset GPIO33
+ * Switch: Realtek RTL8367 family D (chip ID 0x6642 per qca-ssdk.ko
+ *         analysis; NOT yet read from the physical unit)
+ *         Trunk on GMAC1 -> UNIPHY0 -> CPU port 6, reset GPIO33.
+ *         Trunk mode is 2500base-x (HSGMII 2.5G) -- see the note above
+ *         &gmac1. UNVERIFIED on hardware; the stock DTB says SGMII 1G.
  * WiFi:   IPQ5018 internal (ath11k) 2.4 GHz
  *         QCN6102 (qcn6122 fw) 5 GHz via PCIe
  * UART:   GPIO28 (RX) / GPIO29 (TX), 115200 8N1, 1.8V
@@ -134,13 +137,31 @@
 	status = "disabled";
 };
 
+/*
+ * Trunk mode (GMAC1 <-> RTL8367 CPU port 6): 2500base-x, with pause.
+ *
+ * Evidence for 2.5G (HSGMII):
+ *   - vendor U-Boot (ipq5018_gmac.c) configures MODE_EXT_HSGMII / 2500M
+ *   - kuncy7's ipq5018-tplink-ax5x-256m.dtsi (AX5x, same RTL8367 family D
+ *     + IPQ5018) uses 2500base-x, fixed-link pause, UNIPHY_REFCLK_50MHZ
+ *   - the family D series (net-next v6) was validated on HSGMII only
+ * Evidence against / still unexplained:
+ *   - the stock DTB shows phy-mode sgmii, fixed-link speed 1000 on GMAC1
+ * Neither side is confirmed on this unit (no UART yet). If the trunk does
+ * not come up, SGMII 1G + a 25 MHz UNIPHY reference is the fallback to try.
+ *
+ * "pause": reported (third party, AX5x) to be required; without it ~13%
+ * UDP loss was measured because the switch cannot hold a 2.5G GMAC back
+ * against 1G physical ports. Unverified on this board.
+ */
 &gmac1 {
 	status = "okay";
-	phy-mode = "sgmii";
+	phy-mode = "2500base-x";
 
 	fixed-link {
-		speed = <1000>;
+		speed = <2500>;
 		full-duplex;
+		pause;
 	};
 };
 
@@ -148,7 +169,7 @@
 	status = "okay";
 
 	assigned-clocks = <&uniphy0 UNIPHY_CLK_REF>;
-	assigned-clock-rates = <UNIPHY_REFCLK_25MHZ>;
+	assigned-clock-rates = <UNIPHY_REFCLK_50MHZ>;
 };
 
 &mdio0 {
@@ -230,11 +251,12 @@
 				reg = <6>;
 				label = "cpu";
 				ethernet = <&gmac1>;
-				phy-mode = "sgmii";
+				phy-mode = "2500base-x";
 
 				fixed-link {
-					speed = <1000>;
+					speed = <2500>;
 					full-duplex;
+					pause;
 				};
 			};
 		};
@@ -300,11 +322,13 @@
 			partition@100000 {
 				label = "0:BOOTCONFIG";
 				reg = <0x100000 0x040000>;
+				read-only;
 			};
 
 			partition@140000 {
 				label = "0:BOOTCONFIG1";
 				reg = <0x140000 0x040000>;
+				read-only;
 			};
 
 			partition@180000 {
