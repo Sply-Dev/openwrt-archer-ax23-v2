@@ -23,12 +23,7 @@ AX23 v1, which is MediaTek MT7621-based and already officially supported by Open
 
 ## Why this exists
 
-The AX23 v2 shares its SoC, RAM size, NSS/ath11k stack and QCN6102 5GHz radio with
-devices already supported upstream (e.g. the EX511 v2), but uses a different Ethernet
-switch (Realtek RTL8367SC/RTL8365-family) over SGMII, which is not yet wired up anywhere
-in mainline OpenWrt. This repo exists to document that work so it can be picked up,
-reviewed, and eventually tested by anyone with the hardware and a UART connection -
-including upstream OpenWrt maintainers.
+The AX23 v2 shares its SoC, RAM size, NSS/ath11k stack and QCN6102 5GHz radio with devices already supported in other OpenWrt trees (e.g. the EX511 v2), but uses a different Ethernet switch: a Realtek RTL8367 family D chip (chip ID 0x6642 per static analysis, not yet confirmed on the physical unit), handled by the rtl8365mb driver and connected to the SoC over a SerDes trunk (2.5G vs 1G mode still unconfirmed). Support for this chip family is still under review upstream (net-next series, OpenWrt PR #19644) and is not part of a stable OpenWrt release. This repo exists to document that work so it can be picked up, reviewed, and eventually tested by anyone with the hardware and a UART connection - including upstream OpenWrt maintainers.
 
 <div align="center">
   <img src="docs/img/hardware-topology.svg" alt="Hardware topology: IPQ5018 SoC connected via SGMII to the RTL8367SC switch, which exposes 5 Ethernet ports; both radios hang off the SoC; NAND below">
