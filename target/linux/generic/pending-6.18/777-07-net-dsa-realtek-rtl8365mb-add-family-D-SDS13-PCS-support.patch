@@ -1,8 +1,8 @@
-From 7d51259c3e121b99620a1c53dfbbb2362c53210c Mon Sep 17 00:00:00 2001
+From 9af9ff10b3f4b49f1a17859022e8cb1ff25f8ae8 Mon Sep 17 00:00:00 2001
 From: Mieczyslaw Nalewaj <namiltd@yahoo.com>
 Date: Wed, 2 Sep 2026 23:37:31 +0200
-Subject: [PATCH 7/8] net: dsa: realtek: rtl8365mb: add family D SDS13 PCS
- support
+Subject: [PATCH net-next v7 07/10] net: dsa: realtek: rtl8365mb: add family D
+ SDS13 PCS support
 
 Extend the existing RTL8367S SGMII/HSGMII PCS implementation in this
 driver for family D switches, whose CPU SerDes is reached through the
@@ -14,16 +14,30 @@ Keep the existing family C path unchanged and select the new behavior from
 the driver's chip-family metadata, making the implementation reusable by
 other family D boards.
 
+This patch only prepares the family D paths; they become reachable
+when the RTL8367S-VB chip entry is added in the last patch.
+
 Co-developed-by: Fabiano Tassotti <fabianotassotti@gmail.com>
 Signed-off-by: Fabiano Tassotti <fabianotassotti@gmail.com>
 Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
+Reviewed-by: Linus Walleij <linusw@kernel.org>
 ---
- drivers/net/dsa/realtek/rtl8365mb_main.c | 181 ++++++++++++++++++-----
- 1 file changed, 145 insertions(+), 36 deletions(-)
+ drivers/net/dsa/realtek/rtl8365mb_main.c | 242 +++++++++++++++++------
+ 1 file changed, 187 insertions(+), 55 deletions(-)
 
 --- a/drivers/net/dsa/realtek/rtl8365mb_main.c
 +++ b/drivers/net/dsa/realtek/rtl8365mb_main.c
-@@ -273,6 +273,7 @@
+@@ -249,7 +249,8 @@
+  * interface, indexed by the external port number with port 5 (the first
+  * external port) as the base. Other RTL8367 families index this register
+  * differently (e.g. the RTL8367R uses (id + 1) % 2), so this mapping only
+- * holds for the RTL8367C-style parts this driver supports.
++ * holds for the RTL8367C-style parts and for family D, where it is the same
++ * (one bit per external port, base port 5), as in the vendor RTL8367D API.
+  */
+ #define RTL8365MB_BYPASS_LINE_RATE_REG		0x03F7
+ #define RTL8365MB_BYPASS_LINE_RATE_MASK(_port)	BIT((_port) - 5)
+@@ -271,6 +272,7 @@
  #define   RTL8365MB_SDS_INDACS_CMD_BUSY_MASK	BIT(8)
  #define   RTL8365MB_SDS_INDACS_CMD_RUN_MASK	BIT(7)
  #define   RTL8365MB_SDS_INDACS_CMD_WR_MASK	BIT(6)
@@ -31,7 +45,20 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  #define RTL8365MB_SDS_INDACS_ADR_REG		0x6601
  #define RTL8365MB_SDS_INDACS_DATA_REG		0x6602
  
-@@ -321,7 +322,22 @@
+@@ -300,8 +302,10 @@
+ #define RTL8365MB_SDS_REG_LINK_STATUS		0x003d
+ #define   RTL8365MB_SDS_LINK_STATUS_LINK_MASK	BIT(4)
+ 
+-/* The embedded SerDes can only be muxed to external interface 1 (MAC8),
+- * which is port 6.
++/* On family C the embedded SerDes can only be muxed to external interface
++ * 1 (MAC8), which is port 6. Family D has it on external interface 0
++ * (MAC6), see RTL8365MB_D_SDS_EXT0_INDEX. RTL8365MB_SDS_EXT_INTERFACE_ID
++ * below is the family C id; the SerDes port is 6 on both families.
+  */
+ #define RTL8365MB_SDS_EXT_INTERFACE_ID		1
+ #define RTL8365MB_SDS_EXT_INTERFACE_PORT	6
+@@ -319,7 +323,22 @@
  #define   RTL8365MB_SDS_OPTION_ARM_KEY		0x0249
  #define RTL8365MB_SDS_OPTION_REG		0x13C1
  
@@ -54,7 +81,7 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  /* Shared "disable" encoding for both SDS_MISC's and SDS1_MISC0's
   * 5-bit mode fields.
   */
-@@ -696,6 +712,21 @@ static const struct rtl8365mb_jam_tbl_en
+@@ -707,6 +726,21 @@ static const struct rtl8365mb_jam_tbl_en
  	{ 0x0424, 0xD810 }, { 0x0001, 0x0F80 }, { 0x002E, 0x83F2 },
  };
  
@@ -76,7 +103,7 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  enum rtl8365mb_phy_interface_mode {
  	RTL8365MB_PHY_INTERFACE_MODE_INVAL = 0,
  	RTL8365MB_PHY_INTERFACE_MODE_INTERNAL = BIT(0),
-@@ -1247,7 +1278,8 @@ static int rtl8365mb_ext_config_rgmii(st
+@@ -1245,7 +1279,8 @@ static int rtl8365mb_ext_config_rgmii(st
  	return 0;
  }
  
@@ -86,7 +113,7 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  {
  	int ret;
  
-@@ -1265,10 +1297,13 @@ static int rtl8365mb_sds_write(struct re
+@@ -1263,10 +1298,13 @@ static int rtl8365mb_sds_write(struct re
  	 */
  	return regmap_write(priv->map, RTL8365MB_SDS_INDACS_CMD_REG,
  			    RTL8365MB_SDS_INDACS_CMD_RUN_MASK |
@@ -102,7 +129,7 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  {
  	u32 val;
  	int ret;
-@@ -1278,7 +1313,9 @@ static int rtl8365mb_sds_read(struct rea
+@@ -1276,7 +1314,9 @@ static int rtl8365mb_sds_read(struct rea
  		return ret;
  
  	ret = regmap_write(priv->map, RTL8365MB_SDS_INDACS_CMD_REG,
@@ -113,7 +140,7 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  	if (ret)
  		return ret;
  
-@@ -1318,6 +1355,14 @@ static int rtl8365mb_sds_probe_option(st
+@@ -1316,6 +1356,14 @@ static int rtl8365mb_sds_probe_option(st
  	int ret;
  	int i;
  
@@ -128,13 +155,9 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  	/* Nothing to probe if no external interface is wired to the SerDes */
  	for (i = 0; i < RTL8365MB_MAX_NUM_EXTINTS; i++) {
  		extint = &mb->chip_info->extints[i];
-@@ -1396,28 +1441,47 @@ static int rtl8365mb_pcs_config(struct p
- 				const unsigned long *advertising,
- 				bool permit_pause_to_mac)
- {
--	const struct rtl8365mb_jam_tbl_entry *sds_jam;
+@@ -1397,25 +1445,44 @@ static int rtl8365mb_pcs_config(struct p
+ 	const struct rtl8365mb_jam_tbl_entry *sds_jam;
  	const int id = RTL8365MB_SDS_EXT_INTERFACE_ID;
-+	const struct rtl8365mb_jam_tbl_entry *sds_jam;
  	struct rtl8365mb *mb = pcs_to_rtl8365mb(pcs);
 -	struct realtek_priv *priv;
 +	struct realtek_priv *priv = mb->priv;
@@ -186,7 +209,7 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  	/* Hold the embedded DW8051 microcontroller in reset and keep it
  	 * disabled. The vendor driver loads firmware into it to manage the
  	 * SerDes link, but the firmware only duplicates work that phylink
-@@ -1446,34 +1510,53 @@ static int rtl8365mb_pcs_config(struct p
+@@ -1444,34 +1511,57 @@ static int rtl8365mb_pcs_config(struct p
  
  	/* Tune the SerDes with vendor-prescribed parameters */
  	for (i = 0; i < sds_jam_size; i++) {
@@ -201,6 +224,10 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
 -	/* Mux the SerDes to MAC8 in the requested mode */
 +	/* Family-specific post-tuning configuration */
 +	if (is_d) {
++		/* Bit 6 disables the RX of SDS0. As in the vendor RTL8367D
++		 * sequence the whole 2-bit field (bits 7:6) is written, so
++		 * bit 7 is cleared as well.
++		 */
 +		ret = regmap_update_bits(priv->map, RTL8365MB_D_FIBER_CFG2_REG,
 +					 RTL8365MB_D_FIBER_CFG2_RX_DISABLE_MASK,
 +					 RTL8365MB_D_FIBER_CFG2_RX_DISABLE_SDS0);
@@ -256,7 +283,7 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  				  RTL8365MB_SDS_RESET_DEASSERT);
  	if (ret)
  		return ret;
-@@ -1483,12 +1566,14 @@ static int rtl8365mb_pcs_config(struct p
+@@ -1481,27 +1571,32 @@ static int rtl8365mb_pcs_config(struct p
  	 * This flushes the FIFOs and ensures a clean state for the link,
  	 * preventing silent drops and CRC errors.
  	 */
@@ -273,9 +300,11 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  				  RTL8365MB_SDS_BMCR_DPRST_PHASE2);
  	if (ret)
  		return ret;
-@@ -1496,14 +1581,16 @@ static int rtl8365mb_pcs_config(struct p
+ 
  	/* Keep SGMII in-band autonegotiation disabled: the link parameters are
- 	 * forced from rtl8365mb_pcs_link_up() instead.
+-	 * forced from rtl8365mb_pcs_link_up() instead.
++	 * forced from rtl8365mb_pcs_link_up() instead (family C), or from
++	 * mac_link_up() (family D).
  	 */
 -	ret = rtl8365mb_sds_read(priv, RTL8365MB_SDS_REG_NWAY, &val);
 +	ret = rtl8365mb_sds_read(priv, sds_index,
@@ -292,7 +321,7 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  }
  
  static bool rtl8365mb_interface_is_serdes(phy_interface_t interface)
-@@ -1528,10 +1615,14 @@ static void rtl8365mb_pcs_get_state(stru
+@@ -1526,18 +1621,27 @@ static void rtl8365mb_pcs_get_state(stru
  {
  	struct rtl8365mb *mb = pcs_to_rtl8365mb(pcs);
  	struct realtek_priv *priv = mb->priv;
@@ -302,12 +331,16 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  	u32 val;
  	int ret;
  
+-	/* In-band autonegotiation is not implemented, so the link parameters are
+-	 * forced from rtl8365mb_pcs_link_up(). The real link state must still be
+-	 * read from the SerDes itself: the embedded DW8051 microcontroller that
 +	is_d = rtl8365mb_get_family(priv) == RTL8365MB_FAMILY_D;
 +
- 	/* In-band autonegotiation is not implemented, so the link parameters are
- 	 * forced from rtl8365mb_pcs_link_up(). The real link state must still be
- 	 * read from the SerDes itself: the embedded DW8051 microcontroller that
-@@ -1539,7 +1630,11 @@ static void rtl8365mb_pcs_get_state(stru
++	/* In-band autonegotiation is not implemented, so the link parameters
++	 * are forced from rtl8365mb_pcs_link_up() on family C, and from
++	 * mac_link_up() on family D. The real link state must still be read
++	 * from the SerDes itself: the embedded DW8051 microcontroller that
+ 	 * the vendor firmware uses to poll the SerDes is kept disabled (see
  	 * rtl8365mb_pcs_config()), so the link status register can be read
  	 * directly through the SDS_INDACS window without racing the auto-poll.
  	 */
@@ -320,21 +353,31 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  	if (ret) {
  		state->link = false;
  		return;
-@@ -1550,6 +1645,13 @@ static void rtl8365mb_pcs_get_state(stru
+@@ -1548,6 +1652,23 @@ static void rtl8365mb_pcs_get_state(stru
  	if (!state->link)
  		return;
  
 +	if (is_d) {
-+		state->duplex = DUPLEX_FULL;
-+		state->speed = state->interface == PHY_INTERFACE_MODE_2500BASEX ?
-+				SPEED_2500 : SPEED_1000;
++		if (state->interface == PHY_INTERFACE_MODE_2500BASEX) {
++			state->duplex = DUPLEX_FULL;
++			state->speed = SPEED_2500;
++		} else {
++			/* Keep what phylink passed in, but never report the
++			 * link up with an unknown speed: mac_link_up() cannot
++			 * force the port with it.
++			 */
++			if (state->speed == SPEED_UNKNOWN)
++				state->speed = SPEED_1000;
++			if (state->duplex == DUPLEX_UNKNOWN)
++				state->duplex = DUPLEX_FULL;
++		}
 +		return;
 +	}
 +
  	/* The speed and duplex are forced; read them back from the values
  	 * programmed into the SerDes MISC register.
  	 */
-@@ -1591,6 +1693,12 @@ static void rtl8365mb_pcs_link_up(struct
+@@ -1589,6 +1710,12 @@ static void rtl8365mb_pcs_link_up(struct
  	u32 r_speed;
  	int ret;
  
@@ -347,9 +390,55 @@ Signed-off-by: Mieczyslaw Nalewaj <namiltd@yahoo.com>
  	/* The speed field has no value for 2.5 Gbps: the rate is determined by
  	 * the HSGMII SerDes configuration, and the vendor driver programs the
  	 * 1 Gbps value here.
-@@ -1908,7 +2016,8 @@ static void rtl8365mb_phylink_mac_link_u
- 		 * rtl8365mb_pcs_link_up() because pcs_link_up() carries no
- 		 * pause information.
+@@ -1871,7 +1998,7 @@ static void rtl8365mb_phylink_mac_link_d
+ 	/* phylink has no pcs_link_down callback, so on the SerDes path only the
+ 	 * MAC external interface force is reset here. Clearing the MAC force is
+ 	 * enough to bring the link down; the SerDes keeps presenting its last
+-	 * forced state until the next pcs_link_up() reprograms it.
++	 * forced state (family C) until the next pcs_link_up() reprograms it.
+ 	 */
+ 	if (phy_interface_mode_is_rgmii(interface) ||
+ 	    rtl8365mb_interface_is_serdes(interface)) {
+@@ -1904,9 +2031,11 @@ static void rtl8365mb_phylink_mac_link_u
+ 	p = &mb->ports[port];
+ 	schedule_delayed_work(&p->mib_work, 0);
+ 
+-	/* The SerDes forced link state is programmed by the PCS in
++	/* On family C the SerDes forced link state is programmed by the PCS in
+ 	 * rtl8365mb_pcs_link_up(); here only the MAC external interface force
+-	 * is configured, for both RGMII and SerDes.
++	 * is configured. On family D pcs_link_up() does nothing, and the MAC
++	 * external interface force is the only forced link state, for both
++	 * RGMII and SerDes.
+ 	 */
+ 	if (phy_interface_mode_is_rgmii(interface) ||
+ 	    rtl8365mb_interface_is_serdes(interface)) {
+@@ -1920,18 +2049,21 @@ static void rtl8365mb_phylink_mac_link_u
+ 			return;
+ 		}
+ 
+-		/* The SerDes has its own pause enables; program them from
+-		 * the resolved pause modes, as the vendor driver does when
+-		 * forcing the link on a SerDes external interface. These
+-		 * bits, not the MAC force pause bits, gate pause on the
+-		 * SerDes external interface: flow control testing shows
+-		 * that pause frames are only emitted with the SerDes TXFC
+-		 * bit set, while the MAC force pause bits alone have no
+-		 * effect on this port. This is done here rather than in
+-		 * rtl8365mb_pcs_link_up() because pcs_link_up() carries no
+-		 * pause information.
++		/* Family C: the SerDes has its own pause enables; program
++		 * them from the resolved pause modes, as the vendor driver
++		 * does when forcing the link on a SerDes external
++		 * interface. These bits, not the MAC force pause bits, gate
++		 * pause on the SerDes external interface: flow control
++		 * testing shows that pause frames are only emitted with the
++		 * SerDes TXFC bit set, while the MAC force pause bits alone
++		 * have no effect on this port. This is done here rather
++		 * than in rtl8365mb_pcs_link_up() because pcs_link_up()
++		 * carries no pause information. Family D does not use this
++		 * path: its pause bits are set in the forced-mode register
++		 * by rtl8365mb_ext_config_forcemode().
  		 */
 -		if (rtl8365mb_interface_is_serdes(interface)) {
 +		if (rtl8365mb_interface_is_serdes(interface) &&
