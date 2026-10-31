@@ -126,6 +126,26 @@ real boot log running `fw_mem_mode = 1` (the driver default for that SoC), not m
 publicly reviewed report of mode 2 working on this exact radio pair was found. This does not
 mean mode 2 is wrong — the earlier project rationale was that mode 2 is required for 256 MB —
 but it is currently an unverified choice, not a confirmed-safe one. `[OPEN]`
+**Switch driver patch set**
+
+- R19 (new). The eight `777-0x` patches in this tree are an early revision (v1) of
+  a switch driver series by Mieczyslaw Nalewaj (`namiltd`) that has progressed
+  substantially further in draft upstream PR `openwrt/openwrt#19644` (branch
+  `Realtek_DSA`), now at v5/v6. The upstream series has 11 patches (adding `777-09`,
+  family-D L2/LUT support not present in this tree, and `797`, a SerDes conduit
+  re-latch fix originally numbered `778`). A content diff of `777-04` between this
+  tree's v1 and upstream v5/v6 shows a real logic change (conditional vs
+  unconditional MAC7/EXT1 mux set), not a cosmetic one. Third-party hardware
+  validation exists for the upstream series on a different device sharing this
+  device's exact chip ID and family (`gusfm` tested v5/v6 on a TP-Link EX511 v2,
+  RTL8367S-VB/`0x6642`, reporting stable 1Gbps SGMII link, 0 FCS/CRC/drop errors,
+  working VLAN bridging, and clean reboot cycles) — this is currently the strongest
+  third-party hardware evidence available that this patch family works on this
+  exact chip, on different hardware. `[SOURCE]`/`[OPEN]`. Pending action: update
+  this tree's patches to v5/v6 before any physical hardware test is requested of a
+  third party, so that a hardware test result reflects the more-validated patch set.
+  Not yet done; tracked as a planned issue in this project's own issue tracker, not
+  yet filed as of this review. See `docs/KNOWN-ISSUES.md` §8.
 
 ## 3. Pending tests on real hardware
 
@@ -138,7 +158,7 @@ designed to be non-persistent.
 | H0 | Preconditions (not a test) | Console access to the board (UART header JP1; level-shifter SMDs reported removed by the vendor), a way to load an image without flashing, a recovery plan and a backup of the OEM NAND contents. | `[OPEN]` Whether the OEM U-Boot accepts console input and can load a FIT over the network is not established; the non-persistent initramfs path is a hypothesis. |
 | H1 | Non-persistent boot of `initramfs-uImage.itb` | H0 | Kernel starts, serial console output at 115200, userspace reached. |
 | H2 | Kernel log review | H1 | NAND partitions match section 2/S6, no oops/panic, ESS/UNIPHY initialise. |
-| H3 | Switch detection | H1 | `rtl8365mb` reports a chip ID/version and registers `wan`, `lan1`-`lan4`, `cpu`. Settles the open question 0x6642 vs 0x6367 (R1). |
+| H3 | Switch detection | H1 | rtl8365mb reports chip ID 0x6642 / revision 0x0010 and registers wan, lan1-lan4, cpu, matching the identification already confirmed by static analysis (see R1, [VERIFIED]); ideally also captures the driver's own probe message ("found an RTL8367S-VB switch"). MDIO detection alone does not prove this, nor does it settle R4 (link speed). |
 | H4 | CPU link (GMAC1 to switch port 6, SGMII) | H3 | Link up; ping through a LAN port with static addressing; sustained traffic (e.g. iperf) without errors or link drops. MDIO detection alone does not prove this. |
 | H5 | Physical port mapping | H3 | Each RJ45 port matches its DTS label (cable swap test); negotiated speeds 10/100/1000. |
 | H6 | `tp_data` and MAC | H1 | `tp_data` attaches and mounts read-only in preinit; `default-mac` readable. LAN/WAN MAC assignment additionally needs a `02_network` case (1.5). |
@@ -151,15 +171,48 @@ designed to be non-persistent.
 
 **Hardware identification**
 
-- R1 `[OPEN]` The switch is believed to be an RTL8367SC/RTL8367D-family part with chip ID `0x6642`, but the ID has not been read from the physical unit; `0x6367` is also on the table. From static analysis of the vendor `qca-ssdk.ko`, ID `0x6642` maps to internal type 4, which by itself does not prove functional support. `[REPORTED]`
+- R1 `[VERIFIED]` by static analysis, not yet by physical unit. The switch is an
+  RTL8367S-VB ("family D" in Realtek's own driver naming), chip ID `0x6642`, chip
+  revision `0x0010`. This is confirmed by two independent lines of static analysis:
+  cross-reference against OpenWrt's legacy `rtl8367b.c` driver (`chip_num=0x6642` /
+  `chip_ver=0x0010` maps directly to `RTL8367B_CHIP_RTL8367S_VB`), and the vendor
+  `qca-ssdk.ko` detection routine's own internal structure, which tests a separate,
+  earlier ID set (`0x0276`, `0x0597`, `0x6367`, belonging to the unrelated family C)
+  before reaching the `0x6642` check this device's firmware actually resolves to.
+  The register sequence read (unlock at `0x13C2`, ID at `0x1300`, version at
+  `0x1301`) also matches the upstream `rtl8365mb` driver's own register constants,
+  ruling out a register-offset mismatch. See `docs/RESEARCH.md` and
+  `docs/KNOWN-ISSUES.md` §1 for the full derivation. **Still open:** the chip ID
+  register has not been read from the physical unit, and the driver's own probe
+  message has not been observed in a real boot log (H3). `0x6367` was previously
+  listed as an open alternative; static analysis has since shown `0x6367` belongs to
+  a structurally separate detection path (family C) that this device's firmware does
+  not reach, so it is no longer treated as a live alternative for this device's
+  chip, pending physical confirmation. `[REPORTED]`
 - R15 Provenance: the DTS header lists "Physical UART access logs" among its sources. According to project notes, the UART and U-Boot DTB data came from third-party forum reports, not from first-hand access on this project's unit. The header should be corrected before anything is published. `[REPORTED]`
 
 **Switch and Ethernet**
 
 - R2 The eight `777-xx` patches change `rtl8365mb`, a driver shared with other boards (e.g. AX55 v1 uses it). No regression assessment exists, and the family D logic was developed without hardware. Upstream acceptance is not assessed. `[SOURCE]`
-- R3 The SerDes/PCS patches (`777-07`, `777-08`) rest on reverse engineering of the vendor driver. Whether they bring up a working SGMII trunk is unknown. `[OPEN]`
-- R4 Trunk mode and speed (SGMII 1 Gbps, fixed-link on both ends) come from OEM analysis and have not been measured. `[REPORTED]`
-- R5 The DTS has no CPU-port tag-protocol property. Earlier design notes mention `realtek,headerless-cpu-port`; whether the driver in this tree needs it for this topology has not been checked. `[REPORTED]`
+- R3 The SerDes/PCS patches (`777-07`, `777-08`) rest on reverse engineering of the
+  vendor driver. Whether they bring up a working SGMII trunk is unknown. `[OPEN]`
+  This is now compounded by R4 below: it is no longer established that SGMII (as
+  opposed to HSGMII) is even the correct link mode to bring up.
+- R4 Trunk mode and speed are now a live, unresolved dispute between two OEM
+  sources for this same device, not settled "OEM analysis" as previously recorded.
+  The DTB extracted from this unit's own stock firmware shows SGMII, fixed-link
+  1000/full, matching the current DTS. The OEM U-Boot source (`ipq5018_gmac.c`)
+  configures `MODE_EXT_HSGMII` / `PORT_SPEED_2500M` for the same link, contradicting
+  its own device's DTB. Production DTS files for sibling TP-Link boards on the same
+  switch platform (AX53 v2, AX58 v2) use `2500base-x` at 50MHz, consistent with the
+  HSGMII reading. A `pause` property on the `fixed-link` node was separately reported
+  as necessary on related hardware to avoid measured UDP loss when the switch cannot
+  backpressure a 2.5G GMAC against 1G physical ports; this DTS does not have it set
+  regardless of which speed is correct. None of this has been measured on this
+  device. `[OPEN]`, see `docs/KNOWN-ISSUES.md` §4 and `docs/RESEARCH.md`.
+- R5 The DTS has no CPU-port tag-protocol property. Earlier design notes mention
+  `realtek,headerless-cpu-port`; whether the driver in this tree needs it for this
+  topology has not been checked. `[REPORTED]`
 - R6 The committed DTS differs from earlier design notes (which mention the NSS dtsi include, an NSS memory region, and `tp_data` as an NVMEM MAC source). The committed file is authoritative; the notes need reconciling. `[REPORTED]`
 - R9 Without a `02_network` case, the default LAN/WAN interface layout on top of the DSA ports is not defined. Behavior on first boot is untested. `[OPEN]`
 
@@ -171,7 +224,20 @@ designed to be non-persistent.
 **Install path and boot**
 
 - R10 `sysupgrade` is not supported yet: the board is absent from `platform.sh`, so it would take the generic branch, which does not implement the dual-slot logic (`rootfs`/`rootfs_1`, `tp_boot_idx`) that the AX55 v1 branch has. `sysupgrade` images exist but must not be used on hardware until this is designed. `[VERIFIED]` (S11) / behavior `[OPEN]`
-- R11 `0:BOOTCONFIG`, `0:BOOTCONFIG1` and `0:APPSBLENV` are writable in the DTS by design (boot index handling). `ART`, `tp_data`, `radio` are read-only in the DTS, which protects them from the kernel but not from other tools. `[SOURCE]`
+- R11 `0:BOOTCONFIG` and `0:BOOTCONFIG1` are now read-only in the DTS, correcting an
+  earlier design assumption. Boot slot (A/B) selection on this device is handled
+  through the U-Boot environment variable `tp_boot_idx`, set via
+  `fw_setenv tp_boot_idx <0|1>`, not by writing to these NAND partitions. This is
+  confirmed from three independent places in the vendor's own GPL source
+  (`configs/ipq5018.h`'s `BOOT_IDX_FLAG`, `nvrammanager`'s `nm_api.h` `TP_BOOT_IDX`,
+  and literal strings inside the `nvrammanager` binary itself), mirroring the
+  mechanism already used by `kuncy7`'s `platform.sh` case for the sibling
+  `tplink,archer-ax55-v1` board. `0:APPSBLENV` (which stores the U-Boot environment)
+  remains writable by design, since this is where `tp_boot_idx` itself lives. `ART`,
+  `tp_data`, `radio` are read-only in the DTS, which protects them from the kernel
+  but not from other tools. This directly changes what R10's `platform.sh` design
+  needs to do: write the inactive `rootfs`/`rootfs_1` slot, then call
+  `fw_setenv tp_boot_idx`, rather than writing BOOTCONFIG/BOOTCONFIG1. `[SOURCE]`
 
 **Build and repository hygiene**
 
@@ -195,6 +261,7 @@ designed to be non-persistent.
 | Wi-Fi 2.4 / 5 GHz | **Not demonstrated** (calibration and board data unresolved) |
 | Default network config and MAC assignment | **Not implemented** |
 | Persistent install / `sysupgrade` / rollback | **Not implemented** |
+| Switch driver patch set | Carries v1 of an upstream series now at v5/v6 (openwrt/openwrt#19644), with third-party hardware validation on a different device of the same chip/family. Not yet updated in this tree (R19). |
 
 The port is at the "builds and is statically consistent" stage. The single most important gap
 is that nothing has ever executed on the target hardware.
@@ -209,6 +276,8 @@ Before M1 (housekeeping that needs no hardware, to be decided by the project own
 by this document): settle which uncommitted edits belong in the tested state, commit them, and
 rebuild so that the tested image corresponds to a recorded commit (R12). Console access and an
 OEM-NAND backup (H0) are hard prerequisites.
+
+Before M1, in addition to the housekeeping already listed (reconciling uncommitted edits, rebuilding against a recorded commit): the chip-identification question (R1) is now resolved by static analysis and does not block M1, but the link-speed question (R4, SGMII vs HSGMII) and the outdated switch driver patch set (R19) are both relevant to interpreting an M1-stage boot log. A boot log under the current v1 patches and SGMII assumption may not reflect what the hardware is capable of if either turns out to be wrong; this does not block attempting M1, but a negative or partial result on H3/H4 should be weighed against both open questions before being read as "this device doesn't support X".
 
 After M1: M2 switch and SGMII link (H3-H5), M3 Wi-Fi (H7-H8), M4 persistence and rollback
 (H10, after a `platform.sh` design).
