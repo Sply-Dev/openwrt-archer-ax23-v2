@@ -8,8 +8,8 @@
  * Switch: Realtek RTL8367 family D (chip ID 0x6642 per qca-ssdk.ko
  *         analysis; NOT yet read from the physical unit)
  *         Trunk on GMAC1 -> UNIPHY0 -> CPU port 6, reset GPIO33.
- *         Trunk mode is 2500base-x (HSGMII 2.5G) -- see the note above
- *         &gmac1. UNVERIFIED on hardware; the stock DTB says SGMII 1G.
+ *         Trunk mode is SGMII 1G -- see the note above &gmac1.
+ *         Matches the stock DTB. UNVERIFIED on hardware (no UART yet).
  * WiFi:   IPQ5018 internal (ath11k) 2.4 GHz
  *         QCN6102 (qcn6122 fw) 5 GHz via PCIe
  * UART:   GPIO28 (RX) / GPIO29 (TX), 115200 8N1, 1.8V
@@ -138,30 +138,45 @@
 };
 
 /*
- * Trunk mode (GMAC1 <-> RTL8367 CPU port 6): 2500base-x, with pause.
+ * Trunk mode (GMAC1 <-> RTL8367 CPU port 6): SGMII 1G.
  *
- * Evidence for 2.5G (HSGMII):
- *   - vendor U-Boot (ipq5018_gmac.c) configures MODE_EXT_HSGMII / 2500M
- *   - kuncy7's ipq5018-tplink-ax5x-256m.dtsi (AX5x, same RTL8367 family D
- *     + IPQ5018) uses 2500base-x, fixed-link pause, UNIPHY_REFCLK_50MHZ
- *   - the family D series (net-next v6) was validated on HSGMII only
- * Evidence against / still unexplained:
- *   - the stock DTB shows phy-mode sgmii, fixed-link speed 1000 on GMAC1
- * Neither side is confirmed on this unit (no UART yet). If the trunk does
- * not come up, SGMII 1G + a 25 MHz UNIPHY reference is the fallback to try.
+ * This device has five 1G physical ports (WAN + LAN1-4); there is no
+ * physical port on this SKU that exceeds 1G, so a 2.5G trunk would have
+ * no traffic to carry beyond what SGMII 1G already provides.
  *
- * "pause": reported (third party, AX5x) to be required; without it ~13%
- * UDP loss was measured because the switch cannot hold a 2.5G GMAC back
- * against 1G physical ports. Unverified on this board.
+ * Evidence this port's DTS used to cite for 2.5G (HSGMII), and why it
+ * does not hold up:
+ *   - Vendor U-Boot (ipq5018_gmac.c, rtl8367_sw_init()) does configure
+ *     MODE_EXT_HSGMII / PORT_SPEED_2500M, forced, on EXT_PORT0 and
+ *     EXT_PORT1. But this routine runs unconditionally for any board
+ *     built with CONFIG_TP_EXT_SWITCH_RTL8367_ALL and an RTL8367 switch
+ *     present -- it is not board-specific, and it configures two
+ *     extension ports, not this device's single CPU trunk port. This
+ *     matches shared Qualcomm/Realtek SDK boilerplate, not a deliberate
+ *     per-board choice.
+ *   - That same function has a disabled (commented-out) HSGMII signal
+ *     fix, with a comment noting "According to rtk AE, these ops have
+ *     been included in 1.4.2 driver" -- i.e. TP-Link's own firmware
+ *     engineers turned off the HSGMII-specific workaround as obsolete.
+ *   - Sibling boards (AX53 v2, AX58 v2, from kuncy7/openwrt-nss-edma)
+ *     use 2500base-x, but those boards have 2.5G physical ports, unlike
+ *     this device's five 1G ports. The trunk speed there is explained by
+ *     their own port hardware, not by anything specific to this device.
+ *
+ * The stock DTB (the kernel-level config that actually governs runtime
+ * behaviour, as opposed to U-Boot's early, generic bring-up) shows
+ * phy-mode sgmii, fixed-link speed 1000 on GMAC1. This is the config
+ * this DTS now follows. Still UNVERIFIED on physical hardware (no UART
+ * yet); if the trunk does not come up, HSGMII 2.5G + a 50 MHz UNIPHY
+ * reference (with pause) is the fallback to try, in that order.
  */
 &gmac1 {
 	status = "okay";
-	phy-mode = "2500base-x";
+	phy-mode = "sgmii";
 
 	fixed-link {
-		speed = <2500>;
+		speed = <1000>;
 		full-duplex;
-		pause;
 	};
 };
 
@@ -169,7 +184,7 @@
 	status = "okay";
 
 	assigned-clocks = <&uniphy0 UNIPHY_CLK_REF>;
-	assigned-clock-rates = <UNIPHY_REFCLK_50MHZ>;
+	assigned-clock-rates = <UNIPHY_REFCLK_25MHZ>;
 };
 
 &mdio0 {
@@ -251,12 +266,11 @@
 				reg = <6>;
 				label = "cpu";
 				ethernet = <&gmac1>;
-				phy-mode = "2500base-x";
+				phy-mode = "sgmii";
 
 				fixed-link {
-					speed = <2500>;
+					speed = <1000>;
 					full-duplex;
-					pause;
 				};
 			};
 		};
