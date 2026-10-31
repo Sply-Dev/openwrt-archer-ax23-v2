@@ -23,7 +23,7 @@ AX23 v1, which is MediaTek MT7621-based and already officially supported by Open
 
 ## Why this exists
 
-The AX23 v2 shares its SoC (IPQ5018), NAND layout style and QCN6122-class 5GHz radio with the TP-Link Archer AX55 v1, which has official OpenWrt support (snapshot, ipq50xx) for units with the standard RTL8367S switch. The AX23 v2 differs in two ways: it has 256 MB of RAM (the AX55 v1 has 512 MB), and its switch appears to be a Realtek RTL8367 family D chip (chip ID 0x6642 per static analysis, not yet confirmed on the physical unit) — the variant the AX55 v1 page lists as unsupported (RTL8367S-VB). Support for that chip is under review upstream (net-next series, OpenWrt PR #19644). This repo documents that work so it can be picked up, reviewed, and eventually tested by anyone with the hardware and a UART connection - including upstream OpenWrt maintainers.
+The AX23 v2 shares its SoC (IPQ5018), NAND layout style and QCN6122-class 5GHz radio with the TP-Link Archer AX55 v1, which has official OpenWrt support (snapshot, ipq50xx) for units with the standard RTL8367S switch. The AX23 v2 differs in two ways: it has 256 MB of RAM (the AX55 v1 has 512 MB), and its switch appears to be a Realtek RTL8367 family D chip (chip ID 0x6642 per static analysis, not yet confirmed on the physical unit) — the variant the AX55 v1 page lists as unsupported (RTL8367S-VB). Support for that chip is under review upstream (net-next series, OpenWrt PR #19644, v7 as of this writing). This repo documents that work so it can be picked up, reviewed, and eventually tested by anyone with the hardware and a UART connection - including upstream OpenWrt maintainers.
 
 <div align="center">
   <img src="docs/img/hardware-topology.svg" alt="Hardware topology: IPQ5018 SoC connected via SGMII to the RTL8367SC switch, which exposes 5 Ethernet ports; both radios hang off the SoC; NAND below">
@@ -69,7 +69,7 @@ vendor-supplied kernel module.
 | Component | Status |
 |---|---|
 | Boot (initramfs/sysupgrade build) | Builds successfully; not booted on hardware. A/B boot is selected via `fw_setenv tp_boot_idx` (from vendor GPL); the sysupgrade logic for this is not implemented or tested yet |
-| Ethernet switch (RTL8367 family D) | Chip ID 0x6642 inferred from static analysis, not read from the physical unit. Driver patches are based on an earlier revision of the net-next family D series (not yet rebased on v6). Trunk mode in the DTS (2500base-x + pause) is an unverified hypothesis; the stock DTB shows SGMII 1G. Link to CPU port not validated |
+| Ethernet switch (RTL8367 family D) | Chip ID 0x6642 inferred from static analysis, not read from the physical unit. Driver patches updated to the net-next family D series v7 (PR #19644). Trunk mode in the DTS is SGMII, fixed 1000Mbps, matching the stock DTB; link to CPU port not validated on hardware |
 | 2.4GHz radio (IPQ5018 internal) | Caldata hotplug hook written; board data / ART offsets unvalidated; not tested |
 | 5GHz radio (QCN6102) | Caldata hotplug hook written; board data / ART offsets unvalidated; not tested |
 | LEDs / buttons | GPIO map known from OEM DTB; polarity not confirmed |
