@@ -65,27 +65,51 @@ install/boot integration.
 
 ## 4. Trunk link speed / SGMII vs HSGMII
 
-`[OPEN]`, actively disputed. MDIO-level detection of the switch does not by itself
-demonstrate working Ethernet traffic over the GMAC1 to switch CPU port link. Beyond
-that general caveat, the specific link mode is now in question:
+`[VERIFIED by GPL source inspection, not hardware]`. MDIO-level detection of the
+switch does not by itself demonstrate working Ethernet traffic over the GMAC1 to
+switch CPU port link, so this is not a claim that Ethernet works. But the link
+mode question itself is resolved: this port's DTS uses SGMII, fixed 1000Mbps.
 
-- This port's DTS configures SGMII, fixed 1000Mbps, matching the OEM device tree
-  blob extracted from this unit's own stock firmware.
-- The OEM U-Boot source (`ipq5018_gmac.c`) configures `MODE_EXT_HSGMII` /
-  `PORT_SPEED_2500M` for the same link, contradicting the OEM DTB.
+This device has five 1G physical ports (WAN + LAN1-4); there is no port on this
+SKU that exceeds 1G, so a 2.5G trunk would carry no traffic beyond what SGMII 1G
+already provides.
+
+Evidence for SGMII 1G:
+
+- This matches the OEM device tree blob extracted from this unit's own stock
+  firmware (`phy-mode sgmii`, `fixed-link speed 1000`). The DTB is what the
+  kernel actually uses at runtime, as opposed to U-Boot's early bring-up.
+
+Evidence previously cited for HSGMII 2.5G, and why it does not hold up:
+
+- The OEM U-Boot source (`ipq5018_gmac.c`, `rtl8367_sw_init()`) does configure
+  `MODE_EXT_HSGMII` / `PORT_SPEED_2500M`, forced, on `EXT_PORT0` and
+  `EXT_PORT1`. But this routine runs unconditionally for any board built with
+  `CONFIG_TP_EXT_SWITCH_RTL8367_ALL` and an RTL8367 switch present, gated only
+  on switch presence, not board ID or port capability. It also configures two
+  extension ports, not this device's single CPU trunk port. This matches
+  generic Qualcomm/Realtek SDK bring-up code, not a deliberate per-board
+  choice.
+- The same function contains an HSGMII-specific signal fix
+  (`rtl8367d_setAsicReg` sequence) that is commented out, with a note above it
+  reading "According to rtk AE, these ops have been included in 1.4.2 driver"
+  — i.e. TP-Link's own firmware engineers disabled this HSGMII workaround as
+  obsolete.
 - Production DTS files for sibling boards on the same switch platform (AX53 v2,
-  AX58 v2, from `kuncy7/openwrt-nss-edma`) use `2500base-x` at 50MHz, not SGMII at
-  25MHz.
-- A `pause` property on the `fixed-link` node was reported by `kuncy7` as necessary
-  on related hardware to avoid measured UDP loss (~13% in a third-party test) when
-  the switch cannot backpressure a 2.5G GMAC against 1G physical ports. This port's
-  DTS now sets `pause` on both the `&gmac1` and `port@6` fixed-link nodes, but see
-  §10: the currently carried driver patches do not implement a family D pause path,
-  so the property has no effect yet.
+  AX58 v2, from `kuncy7/openwrt-nss-edma`) use `2500base-x` at 50MHz. But those
+  boards have 2.5G physical ports, unlike this device's 1G ports; their trunk
+  speed is explained by their own port hardware, not by anything specific to
+  this device.
 
-None of this is resolved on physical AX23 v2 hardware. This needs to be tested
-(`TESTING.md` H3/H4) before any claim of "Ethernet works" is made, and before
-deciding whether the DTS should move to HSGMII 2.5G. See `docs/DEVICE-TREE.md`'s
+See 10 for a related finding: the `pause` property previously set on both
+`fixed-link` nodes has been removed, since its only stated justification (a
+2.5G CPU trunk unable to backpressure against 1G physical ports) does not
+apply once the trunk itself is SGMII 1G.
+
+Still UNVERIFIED on physical AX23 v2 hardware (no UART yet). This needs to be
+tested (`TESTING.md` H3/H4) before any claim of "Ethernet works" is made. If
+the trunk does not come up in SGMII 1G, HSGMII 2.5G + a 50MHz UNIPHY reference
+(with `pause` restored) is the fallback to try. See `docs/DEVICE-TREE.md`'s
 dedicated section and `docs/RESEARCH.md`'s SGMII/CPU port bring-up section.
 
 ## 5. LED polarity and physical port mapping
