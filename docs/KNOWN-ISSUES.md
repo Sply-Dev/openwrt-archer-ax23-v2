@@ -255,6 +255,67 @@ test has been run on this device with the v7 patches. The PR itself
 is still in draft upstream, requires 6 reviewer approvals to merge,
 and had 1 failing check as of this writing.
 
+## 8.1. A separate, already-merged series covers the same SerDes path (Johan Alvarado, net-next)
+
+`[VERIFIED]`, added 2026-10-31. An earlier read of this series (see the old text of
+§10, superseded below) treated it as a parallel, independently-developed line of
+work, unconnected to PR #19644. Reviewing the full review thread shows that
+framing was wrong: it is not a separate line, it is a **competing implementation
+of the same SGMII/HSGMII SerDes bring-up that PR #19644 also touches, reviewed in
+the same venue by the same people**, and it has already been merged.
+
+- **Series:** `net: dsa: realtek: rtl8365mb: add SGMII/HSGMII support for
+  RTL8367S`, Johan Alvarado, 2 patches, `net-next` v1 through v6.
+- **Merged** into `netdev/net-next.git` on 2026-07-22 by Jakub Kicinski:
+  - `net: dsa: realtek: rtl8365mb: add SGMII support for RTL8367S` -
+    `git.kernel.org/netdev/net-next/c/0b577e2fe06c`
+  - `net: dsa: realtek: rtl8365mb: add HSGMII support for RTL8367S` -
+    `git.kernel.org/netdev/net-next/c/987137345f33`
+- **`Reviewed-by`:** Maxime Chevallier, **Mieczyslaw Nalewaj** (the author of the
+  v7 series in §8), and **Luiz Angelo Daros de Luca**. `Tested-by:` Stanislaw Pal,
+  on a TP-Link **Archer AX55 v1** (IPQ5018 + RTL8367S, HSGMII/2500base-x CPU
+  trunk) - the same SoC/switch combination as this device, though not this exact
+  SKU or port configuration.
+- **Chip coverage:** confirmed family D. Luiz Angelo's review states explicitly
+  that "the only model that could use (H)SGMII in a different interface is
+  RTL8370MB" - i.e. for RTL8367S/RTL8367SB (this device's chip), the series'
+  assumptions about which port the SerDes is muxed to hold.
+- **Design, relevant to §10's pause gap:** models the SerDes as a real
+  `phylink_pcs` (`mac_select_pcs`/`pcs_config`/`pcs_get_state`/`pcs_link_up`),
+  keeps the embedded DW8051 microcontroller held in reset rather than loading
+  vendor firmware into it (avoiding a firmware-blob dependency entirely), and
+  programs the SerDes pause enables (`SDS_MISC_SGMII_TXFC_MASK`/`..._RXFC_MASK`)
+  from the resolved pause state in `mac_link_up()`. This is a from-scratch
+  pause implementation for the SerDes path, not a family-D-specific branch
+  added to the `777-0x` code in this tree.
+
+**Relationship to PR #19644 (§8):** not established with certainty, but the
+review thread gives a strong signal: Mieczyslaw Nalewaj, author of the v7
+series this tree carries, reviewed and approved Alvarado's series rather than
+objecting to a competing implementation. The more likely reading is that
+#19644's SerDes/PCS portions will need to be rebased on top of the
+infrastructure this series introduces, not the other way around - but this is
+an inference from the review thread, not a statement from either author about
+plans, and should be treated as `[OPEN]` until #19644 itself is updated or
+commented on post-merge.
+
+**Relevant but unrelated finding from the same thread (hardware note, not a
+driver issue):** a long sub-thread documents a cold-boot trunk failure
+reported during review, tested on an Archer AX55 v1 (IPQ5018, same SoC family
+as this device). After extensive isolation (register dumps, selective resets,
+a controlled delay experiment), the cause was identified as **a failing power
+supply**, not the driver or this patch series - confirmed by an A/B/A swap
+(old PSU → bad, new PSU → clean twice, old PSU again → bad again). Noted here
+only so that a similar symptom during this project's own hardware bring-up
+(`TESTING.md` H1-H4) is checked against PSU/power quality before being treated
+as a driver or SerDes bug.
+
+**Not yet done:** this tree still carries the `777-0x` (v7, §8) implementation,
+not Alvarado's. No comparison has been made between the two beyond what the
+mailing list thread shows, and no decision has been made about whether to
+switch. This is the next open question for the project, see the project's own
+working notes.
+
 ## 9. Boot slot selection mechanism
 
 `[SOURCE]`, resolved, documented here because an earlier version of this tree's DTS
@@ -315,7 +376,18 @@ version question, that `797` is not needed for this device and that
 family D's pause/link-up handling continues to go through the
 `777-08` re-latch path, which still does not program the SerDes pause
 bits for family D. The `pause;` property therefore remains inert on
-this device even with the updated patch set. The Johan Alvarado
-net-next series (separate line of development, not yet investigated
-in depth) remains the only known implementation of a family D pause
-path, and is still unverified against this device's chip/family.
+this device even with the updated patch set.
+
+**Update (2026-10-31):** the Johan Alvarado `net-next` series referenced here
+is not a separate, unrelated line of development - see §8.1 for the full
+picture, which supersedes this paragraph's earlier framing. It has since been
+merged into `net-next` (2026-07-22), reviewed and approved by the same v7
+author (Mieczyslaw Nalewaj) and by Luiz Angelo Daros de Luca, and its chip
+coverage is confirmed family D (per Luiz Angelo's own review comment on the
+series). It remains the only known implementation of a working SerDes pause
+path for this chip family - this tree's `777-0x` patches still do not
+implement one - but "unverified against this device's chip/family" no longer
+applies: the family-D coverage is now confirmed, independent of this exact
+device/SKU still being untested on physical hardware (true of every code path
+in this project, see §8's "Still open"). See §8.1 for what adopting it would
+involve.
