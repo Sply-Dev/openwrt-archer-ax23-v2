@@ -79,7 +79,9 @@ that general caveat, the specific link mode is now in question:
 - A `pause` property on the `fixed-link` node was reported by `kuncy7` as necessary
   on related hardware to avoid measured UDP loss (~13% in a third-party test) when
   the switch cannot backpressure a 2.5G GMAC against 1G physical ports. This port's
-  DTS does not currently have `pause` set.
+  DTS now sets `pause` on both the `&gmac1` and `port@6` fixed-link nodes, but see
+  §10: the currently carried driver patches do not implement a family D pause path,
+  so the property has no effect yet.
 
 None of this is resolved on physical AX23 v2 hardware. This needs to be tested
 (`TESTING.md` H3/H4) before any claim of "Ethernet works" is made, and before
@@ -234,3 +236,41 @@ install path is writing the inactive `rootfs`/`rootfs_1` slot and then calling
 `fw_setenv tp_boot_idx`, mirroring the pattern already used by `kuncy7`'s
 `platform.sh` case for the sibling `tplink,archer-ax55-v1` board. Not yet implemented
 in this tree, see `TESTING.md` H10.
+
+## 10. `pause` on the GMAC1/CPU-port fixed-link has no effect with the current 777-0x patches
+
+**Status: [VERIFIED by source inspection, not hardware]**
+
+The device tree sets `pause;` on the `fixed-link` nodes of both `&gmac1`
+and `port@6` (CPU port), intending to enable flow control on the 2.5G
+trunk. Third-party reports (AX5x boards, forum) measured ~13% UDP loss
+without it, attributed to the switch being unable to hold a 2.5G GMAC
+back against 1G physical ports.
+
+Source inspection of `target/linux/generic/pending-6.18/777-07` and
+`777-08` shows that `rtl8365mb_phylink_mac_link_up()` only writes the
+SerDes pause bits (`RTL8365MB_SDS_MISC_SGMII_TXFC_MASK` /
+`..._RXFC_MASK`) when:
+
+    rtl8365mb_interface_is_serdes(interface) &&
+    rtl8365mb_get_family(priv) != RTL8365MB_FAMILY_D
+
+Family D is explicitly excluded from this path. A comment in
+`rtl8365mb_pcs_link_up()` (777-07) states that family D instead "forces
+the external MAC ability from mac_link_up(), where the resolved pause
+modes are known," but no such family D code path exists anywhere in the
+777-01 through 777-08 patches currently in this repo. 777-08 only adds
+locking (`sds_lock`) around the existing family-C-only pause block; it
+does not add a family D equivalent.
+
+**Practical implication:** the `pause;` property in the DTS is currently
+inert for this chip. It costs nothing to leave it declared (it documents
+intent, and will start working for free if a future patch adds the
+family D path), but it should not be read as "pause is handled, just
+unverified on hardware." It is "pause is not implemented in the driver
+this project currently carries," independent of hardware access.
+
+**Next step:** check whether upstream PR #19644 (v5/v6, not yet ported
+here per issue #1) or the Johan Alvarado net-next series implements a
+family D pause path before assuming this is solved by updating the
+patch set.
