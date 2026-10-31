@@ -311,10 +311,84 @@ only so that a similar symptom during this project's own hardware bring-up
 as a driver or SerDes bug.
 
 **Not yet done:** this tree still carries the `777-0x` (v7, §8) implementation,
-not Alvarado's. No comparison has been made between the two beyond what the
-mailing list thread shows, and no decision has been made about whether to
-switch. This is the next open question for the project, see the project's own
-working notes.
+not Alvarado's. See §8.2 for what a direct comparison of scope shows, and what
+upstream itself says about the gap between the two.
+
+## 8.2. PR #19644's own checklist confirms the gap, and work to close it is already underway upstream
+
+`[VERIFIED]`, added 2026-10-31. Two follow-up findings, read directly from
+PR #19644's own description and comment thread on GitHub.
+
+**Scope comparison: the `777-0x` patches and Alvarado's series do not overlap
+as much as §8.1 might suggest.** Alvarado's series only replaces the SerDes/PCS
+bring-up (what `777-07`/`777-08` do). It does not touch chip detection
+(`777-01`, `777-02`, `777-10`), family D speed setting (`777-03`), RGMII mode
+for family D (`777-04`), VLAN 4k (`777-05`), raw-VID PVID (`777-06`), or L2/LUT
+access (`777-09`) - none of this is in scope for, or mentioned anywhere in, the
+Alvarado thread. Adopting Alvarado's series is therefore not a drop-in
+replacement for this tree's `777-0x` patch set; it would mean keeping the
+family D-specific patches for everything except SerDes/PCS, and rebasing
+`777-07`/`777-08` on top of the `phylink_pcs` model Alvarado's series
+introduces.
+
+**PR #19644's own checklist says this directly.** The PR description lists:
+
+- ~~fix mode mask calculation~~ - already implemented
+- ~~add VLAN and Bridging support to Realtek rtl8365mb DSA switch~~ - already implemented
+- ~~add SGMII and HSGMII mode support~~ - already implemented
+- ~~add support for rtl8367sb~~ - already implemented
+- **add support for rtl8367s-vb** - not checked off
+
+The third and fourth items are exactly what §8.1 and the `0x6367`/RTL8367SB
+patch found there cover - both are chip-ID `0x6367` (family C), already
+upstream. The remaining, unchecked item, "rtl8367s-vb", is this device's own
+chip (`0x6642`, family D, confirmed in §1). PR #19644's maintainer is tracking
+the same gap this document identifies, in the same terms.
+
+**This rebase work is already in progress upstream, not merely proposed.**
+Comments on the PR (Mieczyslaw Nalewaj and `kuncy7`, Oct 2026) describe an
+active, ongoing split:
+
+- A separate PR, #25153 ("family C fix"), carries a SerDes conduit fix
+  (`797`, already confirmed in §8 as not applicable to family D) that is being
+  aligned line-for-line with this PR's own `931` patch
+  (`net-dsa-realtek-rtl8365mb-defer-SerDes-bring-up-until-conduit-up`,
+  renamed/renumbered from the `778`/`797` lineage this tree already tracks in
+  §8).
+- Once #25153 lands, `931`/this PR is expected to shrink to just the family D
+  early-return in `rtl8365mb_sds_defer_needed()` - i.e. exactly the gate this
+  tree's own §8 already confirmed is unchanged and correct for family D.
+- `930-07`/`930-08` (the family D SerDes/PCS patches - this tree's `777-07`/
+  `777-08` lineage) are explicitly flagged by Nalewaj as needing a rebase onto
+  `797`/the new `phylink_pcs` infrastructure once the split above lands.
+- Nalewaj has stated he has no RTL8367S-VB hardware and is developing "blind";
+  he is explicitly looking for someone to submit the non-`931` commits
+  upstream and to test RGMII mode on real RTL8367S-VB hardware - a possible
+  opening for this project once physical hardware access exists (`TESTING.md`
+  H0).
+
+**Second, independent cold-boot finding (hardware note, not this series'
+fault):** a different cold-boot trunk failure than the one in §8.1 is
+documented by `kuncy7` on the same sibling board (Archer AX55 v1, IPQ5018).
+Symptom: the SerDes reports link up, but every frame sent by the CPU arrives
+at the switch's CPU port with a bad FCS and is dropped - diagnosable via
+`ethtool -S eth0 | grep p06`: a climbing `dot3StatsFCSErrors` counter with
+`ifInUcastPkts` stuck at 0 on a bad boot, both flat/moving normally on a good
+one. `kuncy7` states explicitly this is unrelated to the family D patches.
+This is a different signature from §8.1's PSU-related failure (which showed
+drop events with zero FCS errors) - noted here as a second, distinct
+diagnostic to check against during this project's own hardware bring-up
+(`TESTING.md` H1-H4) before attributing a dead trunk to a driver bug.
+
+**Bottom line for this project's open decision (§8.1):** adopting Alvarado's
+SerDes/PCS model is not an immediate drop-in swap for `777-07`/`777-08` today,
+but it is the direction upstream is already moving, with the exact rebase this
+project would need already being discussed by the patch authors themselves.
+The practical options are to wait for that upstream rebase to land and then
+re-sync this tree's family D SerDes patches against it, or to attempt the
+`777-07`/`777-08` → `phylink_pcs` rebase independently and offer it upstream -
+which would directly address Nalewaj's stated need for someone to carry this
+forward. Neither has been started; this remains `[OPEN]`.
 
 ## 9. Boot slot selection mechanism
 
