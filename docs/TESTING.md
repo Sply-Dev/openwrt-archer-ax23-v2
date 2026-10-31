@@ -67,10 +67,16 @@ Recommended order, since each depends on the previous one succeeding:
 3. **H2 — Kernel log review.** With H1 working, check that NAND partitions match the
    table in `HARDWARE.md`, no kernel oops/panic, and the Ethernet subsystem
    (ESS/UNIPHY) initializes without error.
-4. **H3 — Switch detection.** Confirm `rtl8365mb` reports a chip ID and registers the
-   `wan`/`lan1`–`lan4`/`cpu` ports. This is the test that resolves the open
-   `0x6642` vs `0x6367` question in `KNOWN-ISSUES.md` §1 — it's the single most
-   informative test in this sequence.
+4. **H3 — Switch detection.** Confirm `rtl8365mb` reports chip ID `0x6642` / chip
+   revision `0x0010` and registers the `wan`/`lan1`–`lan4`/`cpu` ports, and ideally
+   captures the driver's own probe message (`"found an RTL8367S-VB switch"` vs
+   `"found an RTL8367S switch"`). Static analysis (two independent lines of
+   evidence, see `docs/RESEARCH.md` and `docs/KNOWN-ISSUES.md` §1) has already
+   identified this chip as RTL8367S-VB, "family D", resolving the earlier `0x6642`
+   vs `0x6367` identification question. What H3 still needs to confirm is that this
+   holds on the physical unit, not just in the vendor firmware's own driver, and
+   that the switch is actually reachable and functional over MDIO on real hardware,
+   not just correctly identified in theory.
 5. **H4 and beyond** — see `archer-ax23-v2-port-status.md` for the rest of the
    sequence (traffic validation per port, radio bring-up, LED/button checks, MAC
    address verification against `KNOWN-ISSUES.md` §3, sysupgrade round-trip).
