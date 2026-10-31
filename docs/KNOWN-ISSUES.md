@@ -206,44 +206,54 @@ build timestamp. This is useful context for anyone comparing behavior across fir
 versions: the switch-relevant code path has been stable across at least these two
 releases.
 
-## 8. Switch driver patch set is an outdated revision (v1 vs upstream v5/v6)
+## 8. Switch driver patch set updated to upstream v7 (PR #19644)
 
-`[SOURCE]`/`[OPEN]`. The eight `777-0x` patches carried in this tree
-(`target/linux/generic/pending-6.18/777-01` through `777-08`) are an early revision
-of a switch driver series by Mieczyslaw Nalewaj (`namiltd`) that has since progressed
-substantially further in draft upstream PR `openwrt/openwrt#19644` (branch
-`Realtek_DSA`), now at v5/v6:
+`[VERIFIED]`. The eight `777-0x` patches previously carried in this tree
+(an early v1 revision) have been replaced with the v7 revision of
+Mieczyslaw Nalewaj's (`namiltd`) switch driver series, from the
+`namiltd/openwrt` branch `Realtek_DSA` (net-next v7, `Reviewed-by:`
+Linus Walleij and Luiz Angelo Daros de Luca). This tree now carries 10
+patches, `777-01` through `777-10`.
 
-- The upstream series has 11 patches (`777-01` through `777-10`, plus `797`), this
-  tree has 8 (`777-01` through `777-08`). The two additional family-D patches not in
-  this tree are `777-09` (L2/LUT support) and `797` (SerDes conduit re-latch,
-  originally numbered `778`, authorship adjusted to credit `kuncy7` during upstream
-  review).
-- This is not purely a version bump. A content diff of `777-04` (RGMII mode for
-  family D) between this tree's v1 and the upstream v5/v6 shows a logic change, not
-  just a cosmetic one: v1 sets the MAC7/EXT1 mux unconditionally, v5/v6 reads the
-  register first and only sets the mux if MAC4/EXT1 is not already claiming the same
+What changed from v1:
+
+- `777-01` is now a dt-bindings entry for RTL8367S-VB rather than
+  detection code; detection logic moved into `777-02`
+  (`add-chip-family-infrastructure`, new in v7).
+- `777-03` through `777-08` carry real logic changes, not just
+  renumbering. For example, `777-04` (RGMII mode for family D) in v1
+  set the MAC7/EXT1 mux unconditionally; v7 reads the register first
+  and only sets the mux if MAC4/EXT1 is not already claiming the same
   pin, avoiding a real conflict between two MAC ports.
-- Third-party hardware validation exists for the upstream series on a different
-  device sharing this device's exact chip ID and family: `gusfm` tested v5 and v6 of
-  the series on a TP-Link EX511 v2 (RTL8367S-VB, chip ID `0x6642`, family D) and
-  reported successful switch detection, a stable 1Gbps SGMII CPU link up in 4.6s, 0
-  FCS/CRC/drop errors, working VLAN-aware bridging, 20 rounds of VLAN churn without
-  loss, and two clean reboot cycles. This is the strongest third-party hardware
-  evidence currently available that this patch family works on this exact chip,
-  even though it is not this specific device.
-- The PR is still in draft, requires 6 reviewer approvals to merge, and has 1 failing
-  check as of this writing.
+- `777-09` (L2/LUT access for family D) and `777-10` (RTL8367S-VB
+  support in `rtl8365mb_main.c`/`Kconfig`) are new, not present in v1.
 
-This was initially missed in this project's own research (an earlier search pass
-concluded, incorrectly, that PR #19644 did not exist or had the wrong number); it was
-confirmed real via direct inspection of the PR page itself, with its full patch list,
-author, comment history, and the `gusfm` test report.
+Verified before merging into this tree, in an isolated build container:
 
-**Pending action:** update this tree's `777-0x` patches to the upstream v5/v6
-revision before asking anyone to test on physical AX23 v2 hardware, so that any
-hardware test result reflects the more-validated patch set rather than the earlier
-v1. Not yet done. Tracked as a planned issue in this project's own issue tracker.
+- All 10 patches apply cleanly against this project's kernel 6.18.55
+  source (tested by reverting v1 and applying v7 in sequence, via both
+  `git apply` and `patch -p1`).
+- The kernel compiles cleanly with the new patches
+  (`make target/linux/compile`), no errors and no driver-specific
+  warnings.
+- The family-D exclusion gate in the separate SerDes-conduit patch
+  (upstream `797`, formerly `778`) is unchanged in v7:
+  `rtl8365mb_sds_defer_needed()` still returns `false` for
+  `RTL8365MB_FAMILY_D`, confirming that patch remains correctly not
+  applicable to this device. See §10's "Next step" resolution below.
+
+Third-party hardware validation for the upstream series (not this
+specific device, but the same chip ID and family) remains the
+`gusfm` report on a TP-Link EX511 v2 (RTL8367S-VB, chip ID `0x6642`,
+family D): successful switch detection, a stable 1Gbps SGMII CPU link
+up in 4.6s, 0 FCS/CRC/drop errors, working VLAN-aware bridging, 20
+rounds of VLAN churn without loss, two clean reboot cycles.
+
+**Still open:** this confirms the patch set builds, not that it works
+on physical AX23 v2 hardware. No UART-based or boot-based functional
+test has been run on this device with the v7 patches. The PR itself
+is still in draft upstream, requires 6 reviewer approvals to merge,
+and had 1 failing check as of this writing.
 
 ## 9. Boot slot selection mechanism
 
@@ -294,7 +304,18 @@ family D path), but it should not be read as "pause is handled, just
 unverified on hardware." It is "pause is not implemented in the driver
 this project currently carries," independent of hardware access.
 
-**Next step:** check whether upstream PR #19644 (v5/v6, not yet ported
-here per issue #1) or the Johan Alvarado net-next series implements a
-family D pause path before assuming this is solved by updating the
-patch set.
+**Next step, resolved:** checked directly in the v7 patch set now
+carried in this tree (§8). The separate SerDes-conduit patch (upstream
+`797`, formerly `778`) still gates `rtl8365mb_sds_defer_needed()` to
+return `false` for `RTL8365MB_FAMILY_D`, with an explicit comment in
+the patch itself: "Family D has its own answer to the far end coming
+up late, the re-latch work, which also starts from
+`conduit_state_change()`." This confirms, independent of the v1-vs-v7
+version question, that `797` is not needed for this device and that
+family D's pause/link-up handling continues to go through the
+`777-08` re-latch path, which still does not program the SerDes pause
+bits for family D. The `pause;` property therefore remains inert on
+this device even with the updated patch set. The Johan Alvarado
+net-next series (separate line of development, not yet investigated
+in depth) remains the only known implementation of a family D pause
+path, and is still unverified against this device's chip/family.
