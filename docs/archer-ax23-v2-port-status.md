@@ -9,7 +9,14 @@ Last reviewed: 2026-10-17.
 > document should be read as hardware validation. A QEMU boot would not change that: it
 > does not exercise this SoC, switch, NAND or radios.
 
-> **Snapshot Note:** This document is an audit snapshot of the private development build tree (`/workspace/openwrt`) recorded on 2026-10-17. References to untracked files, backups, logs, or repository anomalies in section R17 and Appendix A reflect that private working environment at review time and do not exist in this clean public repository.
+> **Post-snapshot update (2026-10-31):** the `777-0x` switch driver patches referenced
+> throughout this document (S8, R19, and the summary table in section 5) have since been
+> migrated from the v1 revision described below to the upstream `net-next` v7 revision
+> (10 patches, `777-01` through `777-10`, OpenWrt PR [#19644](https://github.com/openwrt/openwrt/pull/19644)).
+> This snapshot's references to "eight patches" and "v5/v6" reflect the state of the tree
+> on 2026-10-17 and were **not** updated to match - this document remains an unmodified
+> audit of that date, per the Snapshot Note above. For the current state of the switch
+> driver patch set, see [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) §8 and §10.
 
 ## Scope and evidence conventions
 
