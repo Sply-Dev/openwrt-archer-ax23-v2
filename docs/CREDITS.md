@@ -13,29 +13,38 @@ authors, so that credit lands where it belongs.
 
 ## Carried-in third-party patches
 
-The eight `rtl8365mb` switch driver patches in
-`target/linux/generic/pending-6.18/777-01` through `777-08` are **not this
-project's own work**. They were written by:
+The ten `rtl8365mb` switch driver patches in
+`target/linux/generic/pending-6.18/777-01` through `777-10` are **not this
+project's own work**. They are the `net-next v7` revision of the upstream
+series submitted as OpenWrt PR [#19644](https://github.com/openwrt/openwrt/pull/19644)
+(`namiltd/openwrt`, branch `Realtek_DSA`). They were written by:
 
-- **Mieczyslaw Nalewaj** (`namiltd@yahoo.com`) - author of all eight patches
-  (`777-01` through `777-08`)
-- **Fabiano Tassotti** (`fabianotassotti@gmail.com`) - co-signed `777-07`
-- **Oleg Gavrilov** (`gabonpivovich@gmail.com`) - co-signed `777-08`
+- **Mieczyslaw Nalewaj** (`namiltd@yahoo.com`) - author of all ten patches
+  (`777-01` through `777-10`)
+- **Fabiano Tassotti** (`fabianotassotti@gmail.com`) - co-developed `777-07`
+  (`Co-developed-by:`/`Signed-off-by:`)
 
-Each patch file keeps its original `From:`/`Signed-off-by:` header, which is
-the authoritative record of authorship. This repository carries them because
-the AX23 v2's switch (RTL8367SC, "family D") needs the functionality they
-add, and the DTS in this tree assumes they're applied - see
-[`DEVICE-TREE.md`](DEVICE-TREE.md). They are licensed `GPL-2.0-or-later` per the kernel
-tree they patch; see each patch file for specifics.
+The following reviewed patches in this v7 revision:
 
-<!--
-TODO (repository owner): fill in the concrete source for these eight patches
-- e.g. an OpenWrt Gerrit/GitHub PR number, a lore.kernel.org / openwrt-devel
-thread, or an upstream fork/branch - and link it here, so anyone reading this
-file can go straight to the original submission instead of just the patch
-headers.
--->
+- **Linus Walleij** (`linusw@kernel.org`) - `Reviewed-by` on `777-01`, `777-02`,
+  and `777-07`
+- **Luiz Angelo Daros de Luca** (`luizluca@gmail.com`) - `Reviewed-by` on
+  `777-01` and `777-02`
+
+Each patch file keeps its original `From:`/`Signed-off-by:`/`Reviewed-by:`
+header, which is the authoritative record of authorship and review - see the
+patch files themselves for the exact attribution per patch. This repository
+carries them because the AX23 v2's switch (RTL8367SC, "family D") needs the
+functionality they add, and the DTS in this tree assumes they're applied -
+see [`DEVICE-TREE.md`](DEVICE-TREE.md). They are licensed `GPL-2.0-or-later`
+per the kernel tree they patch; see each patch file for specifics.
+
+> **Note on the earlier (v1) revision:** this repository previously carried
+> an early v1 revision of this same series (eight patches, `777-01` through
+> `777-08`). That revision was also written by Mieczyslaw Nalewaj, with
+> `Fabiano Tassotti` and `Oleg Gavrilov` credited as co-signers on individual
+> patches. It was replaced in full by the v7 revision above - see
+> [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) §8 for what changed between revisions.
 
 ## Hardware access and research credited elsewhere
 
@@ -46,3 +55,6 @@ headers.
   **AX55 v1** (`kuncy7/openwrt-ax55-v1`) - used as references while writing
   this device's DTS; see [`DEVICE-TREE.md`](DEVICE-TREE.md) for which values were copied
   versus derived independently.
+- **gusfm** (OpenWrt forum) - reported testing the v5/v6 revision of the
+  `777-0x` series on a TP-Link EX511 v2 (same switch family), referenced in
+  [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) §8.
