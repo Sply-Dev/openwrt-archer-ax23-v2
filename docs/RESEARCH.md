@@ -181,11 +181,12 @@ behavior, though the binding may not expose settle time directly.
 
 ## SGMII / CPU port bring-up
 
-`[OPEN]`/`[SOURCE]` The GPL source (`dal_rtl8367d_port.c`) shows CPU-port SerDes
-configuration driven through register `RTL8367D_REG_SDS_MISC` (`0x1d11`) for
-SerDes0/MAC6 and `RTL8367D_REG_SDS1_MISC0` (`0x1d78`) for SerDes1, with mode
-constants including `SGMII = 0x02` and `HSGMII = 0x12`. This matches the DTS's
-`fixed-link`/SGMII configuration for `gmac1` (see `DEVICE-TREE.md`).
+`[OPEN]`/`[SOURCE]`, actively disputed. The GPL source (`dal_rtl8367d_port.c`) shows
+CPU-port SerDes configuration driven through register `RTL8367D_REG_SDS_MISC`
+(`0x1d11`) for SerDes0/MAC6 and `RTL8367D_REG_SDS1_MISC0` (`0x1d78`) for SerDes1,
+with mode constants including `SGMII = 0x02` and `HSGMII = 0x12`. This confirms both
+modes exist as options in the vendor driver, it does not by itself establish which
+one this device actually uses.
 
 This finding is included with lower confidence than the sections above: it was
 reported from GPL source reading during an earlier analysis pass in this project
@@ -196,6 +197,32 @@ for their existence), but the exact bit-field sequence of writes during bring-up
 has not been independently re-verified against `.ko` disassembly in this pass.
 Treat the register/constant names as reliable and the precise write ordering as
 indicative, not confirmed.
+
+**Update: the question of which mode this device actually uses is now a live
+dispute, not an open-but-unexamined detail.** Three additional data points were
+found after the analysis above:
+
+- The OEM U-Boot source for this device (`ipq5018_gmac.c`) configures
+  `MODE_EXT_HSGMII` with `PORT_SPEED_2500M` for the GMAC1 to switch link, i.e. the
+  `HSGMII = 0x12` constant above, not `SGMII = 0x02`.
+- The DTB extracted from this device's own stock firmware shows `phy-mode = "sgmii"`
+  with a `fixed-link` speed of 1000, i.e. the `SGMII = 0x02` constant, contradicting
+  the U-Boot source for the same device.
+- Production OpenWrt DTS files for sibling TP-Link boards on the same switch
+  platform (AX53 v2, AX58 v2, from `kuncy7/openwrt-nss-edma`) use `2500base-x` at a
+  50MHz reference clock, matching the HSGMII reading, not the DTB reading.
+
+This is an unresolved internal contradiction between two OEM sources for the same
+device (U-Boot source code vs. extracted DTB), not a disagreement between this
+project and a reference. It is possible the OEM runs the link below its negotiated
+maximum in the stock DTB for reasons not evident from source alone. Resolving this
+needs either a boot log showing the actual negotiated link speed on this device, or
+a direct read of the UNIPHY/SerDes PCS mode registers (`RTL8367D_REG_SDS_MISC` /
+`RTL8367D_REG_SDS1_MISC0` above) on a running unit. See `docs/HARDWARE.md` and
+`docs/DEVICE-TREE.md` for how this currently affects the DTS, and
+`docs/KNOWN-ISSUES.md` §4 for the tracked open question, including a related finding
+that a `pause` property on the `fixed-link` node may be required regardless of which
+speed is correct.
 
 ## Port mapping
 
