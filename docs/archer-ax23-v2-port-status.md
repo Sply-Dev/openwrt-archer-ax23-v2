@@ -11,8 +11,9 @@ Last reviewed: 2026-10-17.
 
 > **Post-snapshot update (2026-10-31):** the `777-0x` switch driver patches referenced
 > throughout this document (S8, R19, and the summary table in section 5) have since been
-> migrated from the v1 revision described below to the upstream `net-next` v7 revision
-> (10 patches, `777-01` through `777-10`, OpenWrt PR [#19644](https://github.com/openwrt/openwrt/pull/19644)).
+> migrated from the v1 revision described below to the upstream `net-next` pre-v7 revision
+> (10 patches, `777-01` through `777-10`, OpenWrt PR [#19644](https://github.com/openwrt/openwrt/pull/19644),
+> not yet formally submitted as v7 - see `KNOWN-ISSUES.md` §8 for the author's own clarification).
 > This snapshot's references to "eight patches" and "v5/v6" reflect the state of the tree
 > on 2026-10-17 and were **not** updated to match - this document remains an unmodified
 > audit of that date, per the Snapshot Note above. For the current state of the switch
