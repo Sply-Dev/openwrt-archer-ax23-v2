@@ -206,12 +206,12 @@ build timestamp. This is useful context for anyone comparing behavior across fir
 versions: the switch-relevant code path has been stable across at least these two
 releases.
 
-## 8. Switch driver patch set updated to upstream v7 (PR #19644)
+## 8. updated to upstream pre-v7 (PR #19644)
 
 `[VERIFIED]`. The eight `777-0x` patches previously carried in this tree
-(an early v1 revision) have been replaced with the v7 revision of
+(an early v1 revision) have been replaced with the pre-v7 revision of
 Mieczyslaw Nalewaj's (`namiltd`) switch driver series, from the
-`namiltd/openwrt` branch `Realtek_DSA` (net-next v7, `Reviewed-by:`
+`namiltd/openwrt` branch `Realtek_DSA` (net-next pre-v7, `Reviewed-by:`
 Linus Walleij and Luiz Angelo Daros de Luca). This tree now carries 10
 patches, `777-01` through `777-10`.
 
@@ -219,10 +219,10 @@ What changed from v1:
 
 - `777-01` is now a dt-bindings entry for RTL8367S-VB rather than
   detection code; detection logic moved into `777-02`
-  (`add-chip-family-infrastructure`, new in v7).
+  (`add-chip-family-infrastructure`, new in pre-v7).
 - `777-03` through `777-08` carry real logic changes, not just
   renumbering. For example, `777-04` (RGMII mode for family D) in v1
-  set the MAC7/EXT1 mux unconditionally; v7 reads the register first
+  set the MAC7/EXT1 mux unconditionally; pre-v7 reads the register first
   and only sets the mux if MAC4/EXT1 is not already claiming the same
   pin, avoiding a real conflict between two MAC ports.
 - `777-09` (L2/LUT access for family D) and `777-10` (RTL8367S-VB
@@ -231,13 +231,13 @@ What changed from v1:
 Verified before merging into this tree, in an isolated build container:
 
 - All 10 patches apply cleanly against this project's kernel 6.18.55
-  source (tested by reverting v1 and applying v7 in sequence, via both
+  source (tested by reverting v1 and applying pre-v7 in sequence, via both
   `git apply` and `patch -p1`).
 - The kernel compiles cleanly with the new patches
   (`make target/linux/compile`), no errors and no driver-specific
   warnings.
 - The family-D exclusion gate in the separate SerDes-conduit patch
-  (upstream `797`, formerly `778`) is unchanged in v7:
+  (upstream `797`, formerly `778`) is unchanged in pre-v7:
   `rtl8365mb_sds_defer_needed()` still returns `false` for
   `RTL8365MB_FAMILY_D`, confirming that patch remains correctly not
   applicable to this device. See §10's "Next step" resolution below.
@@ -251,7 +251,7 @@ rounds of VLAN churn without loss, two clean reboot cycles.
 
 **Still open:** this confirms the patch set builds, not that it works
 on physical AX23 v2 hardware. No UART-based or boot-based functional
-test has been run on this device with the v7 patches. The PR itself
+test has been run on this device with the pre-v7 patches. The PR itself
 is still in draft upstream, requires 6 reviewer approvals to merge,
 and had 1 failing check as of this writing.
 
@@ -272,7 +272,7 @@ the same venue by the same people**, and it has already been merged.
   - `net: dsa: realtek: rtl8365mb: add HSGMII support for RTL8367S` -
     `git.kernel.org/netdev/net-next/c/987137345f33`
 - **`Reviewed-by`:** Maxime Chevallier, **Mieczyslaw Nalewaj** (the author of the
-  v7 series in §8), and **Luiz Angelo Daros de Luca**. `Tested-by:` Stanislaw Pal,
+  pre-v7 series in §8), and **Luiz Angelo Daros de Luca**. `Tested-by:` Stanislaw Pal,
   on a TP-Link **Archer AX55 v1** (IPQ5018 + RTL8367S, HSGMII/2500base-x CPU
   trunk) - the same SoC/switch combination as this device, though not this exact
   SKU or port configuration.
@@ -290,7 +290,7 @@ the same venue by the same people**, and it has already been merged.
   added to the `777-0x` code in this tree.
 
 **Relationship to PR #19644 (§8):** not established with certainty, but the
-review thread gives a strong signal: Mieczyslaw Nalewaj, author of the v7
+review thread gives a strong signal: Mieczyslaw Nalewaj, author of the pre-v7
 series this tree carries, reviewed and approved Alvarado's series rather than
 objecting to a competing implementation. The more likely reading is that
 #19644's SerDes/PCS portions will need to be rebased on top of the
@@ -310,7 +310,7 @@ only so that a similar symptom during this project's own hardware bring-up
 (`TESTING.md` H1-H4) is checked against PSU/power quality before being treated
 as a driver or SerDes bug.
 
-**Not yet done:** this tree still carries the `777-0x` (v7, §8) implementation,
+**Not yet done:** this tree still carries the `777-0x` (pre-v7, §8) implementation,
 not Alvarado's. See §8.2 for what a direct comparison of scope shows, and what
 upstream itself says about the gap between the two.
 
@@ -439,13 +439,13 @@ family D path), but it should not be read as "pause is handled, just
 unverified on hardware." It is "pause is not implemented in the driver
 this project currently carries," independent of hardware access.
 
-**Next step, resolved:** checked directly in the v7 patch set now
+**Next step, resolved:** checked directly in the pre-v7 patch set now
 carried in this tree (§8). The separate SerDes-conduit patch (upstream
 `797`, formerly `778`) still gates `rtl8365mb_sds_defer_needed()` to
 return `false` for `RTL8365MB_FAMILY_D`, with an explicit comment in
 the patch itself: "Family D has its own answer to the far end coming
 up late, the re-latch work, which also starts from
-`conduit_state_change()`." This confirms, independent of the v1-vs-v7
+`conduit_state_change()`." This confirms, independent of the (v1) vs (pre-v7)
 version question, that `797` is not needed for this device and that
 family D's pause/link-up handling continues to go through the
 `777-08` re-latch path, which still does not program the SerDes pause
@@ -455,7 +455,7 @@ this device even with the updated patch set.
 **Update (2026-10-31):** the Johan Alvarado `net-next` series referenced here
 is not a separate, unrelated line of development - see §8.1 for the full
 picture, which supersedes this paragraph's earlier framing. It has since been
-merged into `net-next` (2026-07-22), reviewed and approved by the same v7
+merged into `net-next` (2026-07-22), reviewed and approved by the same pre-v7
 author (Mieczyslaw Nalewaj) and by Luiz Angelo Daros de Luca, and its chip
 coverage is confirmed family D (per Luiz Angelo's own review comment on the
 series). It remains the only known implementation of a working SerDes pause
