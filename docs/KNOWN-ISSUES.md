@@ -206,7 +206,7 @@ build timestamp. This is useful context for anyone comparing behavior across fir
 versions: the switch-relevant code path has been stable across at least these two
 releases.
 
-## 8. updated to upstream pre-v7 (PR #19644)
+## 8. Switch driver patch set updated to upstream pre-v7 (PR #19644)
 
 `[VERIFIED]`. The eight `777-0x` patches previously carried in this tree
 (an early v1 revision) have been replaced with the pre-v7 revision of
