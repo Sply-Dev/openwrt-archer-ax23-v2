@@ -1,29 +1,20 @@
 # Build instructions
 
-These instructions reproduce the build this port has been tested against. They cover
-**building the firmware image**, not flashing it — see `TESTING.md` for the current
-state of hardware validation (as of writing, none of these images have been run on a
-physical AX23 v2).
+These instructions describe how to reproduce the OpenWrt build for the TP-Link Archer AX23 v2. They cover **building the firmware images, not flashing them**. See `TESTING.md` for the current hardware-validation status. As of this writing, no image has successfully booted on a physical AX23 v2.
 
 ## Prerequisites
 
-Tested on Debian 13 (trixie) with GCC 14.2.0 and GNU Make 4.4.1. OpenWrt's own build
-requirements apply — see the
-[official OpenWrt build documentation](https://openwrt.org/docs/guide-developer/toolchain/install-buildsystem)
-for the full dependency list for your distribution. Packages confirmed present in the
-environment this was built in:
+Tested on Debian 13 (trixie) with GCC 14.2.0 and GNU Make 4.4.1. OpenWrt's own build requirements apply — see the [official OpenWrt build documentation](https://openwrt.org/docs/guide-developer/toolchain/install-buildsystem) for the full dependency list for your distribution.
 
-```
+Packages confirmed present in the environment used for the build:
+
+```sh
 build-essential gawk libncurses-dev python3 python3-dev unzip zlib1g-dev
 ```
 
-**Disk space:** budget at least 25-30GB free for a single target build (source tree,
-toolchain, and build artifacts).
+**Disk space:** budget at least 25–30 GB free for a single target build (source tree, toolchain, and build artifacts).
 
-**Time:** on a 2-core machine, a from-scratch build of this target takes on the order
-of hours; an incremental rebuild after a small change (e.g. editing the DTS) took
-around 18 minutes in the environment this was tested in. Your mileage will vary
-heavily with core count.
+**Time:** on a 2-core machine, a from-scratch build of this target takes on the order of hours. An incremental rebuild after a small change (e.g. editing the DTS) took around 18 minutes in the environment used for testing. Your mileage will vary heavily with core count.
 
 ## 1. Get an OpenWrt source tree
 
@@ -35,9 +26,9 @@ git checkout 98b1185d039344553aaf8270d0661cfad4f0a54d
 
 ### Base revision and reproducibility
 
-- **Development base revision:** This port was developed and compiled against upstream OpenWrt commit [`98b1185d039344553aaf8270d0661cfad4f0a54d`](https://github.com/openwrt/openwrt/commit/98b1185d039344553aaf8270d0661cfad4f0a54d) ("mt76: update to Git HEAD (2026-10-08)", author Felix Fietkau), which is the upstream parent of the development checkpoint (`b2ab51c08c`).
-- Checking out this revision aligns the subtarget (`target/linux/qualcommax/ipq50xx`), kernel patches (`target/linux/generic/pending-6.18`), and build scripts with the state in which this port's patches and DTS were compiled.
-- **Reproducibility note:** While pinning this upstream commit eliminates core tree divergence, an end-to-end clean-room build from a fresh clone following only this guide has not yet been independently re-run. Host toolchain versions, feed package snapshots, and `.config` selections can introduce build-time differences.
+- **Development base revision:** This port was developed against upstream OpenWrt commit [`98b1185d039344553aaf8270d0661cfad4f0a54d`](https://github.com/openwrt/openwrt/commit/98b1185d039344553aaf8270d0661cfad4f0a54d) ("mt76: update to Git HEAD (2026-10-08)", author Felix Fietkau), identified as the upstream parent of the development checkpoint (`b2ab51c08c`).
+- Checking out this revision aligns the subtarget (`target/linux/qualcommax/ipq50xx`), kernel patches (`target/linux/generic/pending-6.18`), and build scripts with the development state against which this port was prepared.
+- **Reproducibility note:** Pinning the upstream commit eliminates core source-tree divergence, but an end-to-end clean-room build from a fresh clone following only this guide has not yet been independently re-run. Host toolchain versions, feed package snapshots, and `.config` selections can introduce build-time differences.
 
 ## 2. Apply this port's patches
 
@@ -48,7 +39,13 @@ cp /path/to/ax23v2-public/target/linux/qualcommax/dts/ipq5018-archer-ax23-v2.dts
    target/linux/qualcommax/dts/
 ```
 
-Apply the switch driver patches (family D / RTL8367D support for `rtl8365mb`):
+### Apply the Realtek switch driver patch series
+
+This port includes the ten-patch **net-next v7** series for the Realtek RTL8365MB DSA driver, numbered `777-01` through `777-10`.
+
+The series introduces chip-family infrastructure, adds RTL8367S-VB support, and includes family-D-specific functionality such as speed configuration, RGMII configuration, VLAN handling, SDS13 PCS support, SerDes re-latching, and L2 LUT access.
+
+Apply all ten patches:
 
 ```sh
 for p in /path/to/ax23v2-public/target/linux/generic/pending-6.18/777-*.patch; do
@@ -56,22 +53,25 @@ for p in /path/to/ax23v2-public/target/linux/generic/pending-6.18/777-*.patch; d
 done
 ```
 
-Apply the ath11k calibration-data patch:
+The patches must be applied to the matching upstream source revision specified in Section 1.
+
+### Apply the ath11k calibration-data patch
 
 ```sh
 patch -p1 < /path/to/ax23v2-public/patches/0001-add-tplink-archer-ax23-v2-caldata.patch
 ```
 
-Add the device definition block. The content is in
-`target/linux/qualcommax/image/ipq50xx-ax23v2-snippet.mk` in this repo, with a comment
-indicating where it belongs in the real `ipq50xx.mk` (immediately after the
-`mercusys_mr80x-v2` device block and before `tplink_archer-ax55-v1`, confirmed by line
-position at the time this was written — if those neighboring devices have moved,
-search for them by name instead of by line number). Paste the block into
-`target/linux/qualcommax/image/ipq50xx.mk` at that location.
+### Add the device definition
 
-See `docs/DEVICE-TREE.md` for the reasoning behind these patches, not just their
-content.
+The device definition block is provided in:
+
+`target/linux/qualcommax/image/ipq50xx-ax23v2-snippet.mk`
+
+Paste its contents into the upstream `target/linux/qualcommax/image/ipq50xx.mk`, immediately after the `mercusys_mr80x-v2` device block and before `tplink_archer-ax55-v1`.
+
+These neighboring device definitions are reference points; search for them by name if their positions have changed.
+
+See `docs/DEVICE-TREE.md` for the reasoning behind the device tree and switch configuration.
 
 ## 3. Configure the build
 
@@ -79,29 +79,35 @@ content.
 make defconfig
 ```
 
-Then select the device profile. Either via `menuconfig`:
+Then select the device profile using `menuconfig`:
 
 ```sh
 make menuconfig
-# Target System: Qualcomm Atheros QCA/QCN/IPQ/OCTEON...
-# Subtarget: IPQ50xx based boards
-# Target Profile: TP-Link Archer AX23 v2
 ```
 
-or directly, by setting in `.config`:
+Select:
 
+```text
+Target System: Qualcomm Atheros QCA/QCN/IPQ/OCTEON...
+Subtarget: IPQ50xx based boards
+Target Profile: TP-Link Archer AX23 v2
 ```
+
+Alternatively, set the profile directly in `.config`:
+
+```text
 CONFIG_TARGET_qualcommax_ipq50xx_DEVICE_tplink_archer-ax23-v2=y
 ```
 
-and running `make defconfig` again to resolve dependent options.
+Then run `make defconfig` again to resolve dependent options.
 
-If you want an initramfs image for non-persistent testing (recommended — see
-`TESTING.md` before writing anything to NAND), also enable:
+For an initramfs image intended for non-persistent testing, also enable:
 
-```
+```text
 CONFIG_TARGET_ROOTFS_INITRAMFS=y
 ```
+
+**The initramfs image is the intended first-stage hardware validation artifact.** See `TESTING.md` for the proposed RAM-only testing procedure and its prerequisites.
 
 ## 4. Build
 
@@ -109,14 +115,21 @@ CONFIG_TARGET_ROOTFS_INITRAMFS=y
 make -j"$(nproc)"
 ```
 
-For a first build, consider `make -j1 V=s` instead, or re-running with `V=s` on
-failure — a serial build makes it much easier to see which package failed.
+For a first build, consider:
+
+```sh
+make -j1 V=s
+```
+
+Alternatively, re-run with `V=s` after a failure. A serial build makes it easier to identify which package failed.
 
 ## 5. Output
 
-Successful builds produce, under `bin/targets/qualcommax/ipq50xx/`:
+Successful builds produce artifacts under:
 
-```
+`bin/targets/qualcommax/ipq50xx/`
+
+```text
 openwrt-qualcommax-ipq50xx-tplink_archer-ax23-v2-initramfs-factory.ubi
 openwrt-qualcommax-ipq50xx-tplink_archer-ax23-v2-initramfs-uImage.itb
 openwrt-qualcommax-ipq50xx-tplink_archer-ax23-v2-squashfs-factory.ubi
@@ -124,22 +137,21 @@ openwrt-qualcommax-ipq50xx-tplink_archer-ax23-v2-squashfs-sysupgrade.bin
 openwrt-qualcommax-ipq50xx-tplink_archer-ax23-v2.manifest
 ```
 
-None of these have been written to a physical device as of this writing. **Do not
-flash the `squashfs` images to real hardware before reading `TESTING.md`** — the
-proposed first step on real hardware is a non-persistent boot of the
-`initramfs-uImage.itb` over UART/TFTP (contingent on test H0 confirming that
-OEM U-Boot accepts interactive commands and network image loading), not a NAND write.
+### Flashing restrictions
+
+**Generating an image does not mean that it is safe to flash.**
+
+None of these images have been successfully booted on a physical AX23 v2 as of this writing.
+
+- The `squashfs-factory.ubi` and `squashfs-sysupgrade.bin` images are **not authorized for flashing**.
+- Do not write any generated image to NAND or attempt a persistent installation.
+- The proposed first hardware-validation step is a non-persistent boot of `initramfs-uImage.itb` through UART/TFTP, contingent on test H0 confirming that the OEM U-Boot accepts interactive commands and network image loading.
+- No NAND write is part of the initial validation procedure.
+
+Read `TESTING.md` before attempting any hardware testing.
 
 ## Known build-time caveats
 
-- The switch driver (`rtl8365mb`, with the family-D patches applied) is built directly
-  into the kernel in the configuration this was tested with, not as a loadable module.
-- `CONFIG_SERIAL_AMBA_PL011` / `_CONSOLE` were enabled in
-  `target/linux/qualcommax/config-6.18` specifically to allow booting the initramfs
-  image under QEMU's `virt` machine for userspace-level smoke testing. **This does not
-  exercise the IPQ5018 SoC, the RTL8367 switch, NAND, or either radio** — a QEMU boot
-  proves the initramfs userspace itself isn't broken, nothing about this specific
-  hardware. See `TESTING.md`.
-- No `board-2.bin`/`firmware-2.bin` was found for the QCN6122 radio in test builds —
-  only `m3_fw`. The implication of this is still open; see
-  `docs/KNOWN-ISSUES.md` §2.
+- The `rtl8365mb` switch driver is built directly into the kernel in the tested configuration, not as a loadable module. The applied net-next v7 series contains support for multiple chip families; the presence of RTL8367S-VB support in the driver does not establish that this specific hardware configuration has been validated.
+- `CONFIG_SERIAL_AMBA_PL011` / `_CONSOLE` were enabled in `target/linux/qualcommax/config-6.18` specifically to allow booting the initramfs image under QEMU's `virt` machine for userspace-level smoke testing. **This does not exercise the IPQ5018 SoC, RTL8367 switch, NAND, or either radio.** A QEMU boot only demonstrates that the initramfs userspace itself is not broken. See `TESTING.md`.
+- No `board-2.bin` / `firmware-2.bin` was found for the QCN6122 radio in test builds — only `m3_fw`. The implications remain unresolved; see `docs/KNOWN-ISSUES.md`, Section 2.
