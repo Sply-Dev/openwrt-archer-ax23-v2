@@ -15,16 +15,19 @@ authors, so that credit lands where it belongs.
 
 The ten `rtl8365mb` switch driver patches in
 `target/linux/generic/pending-6.18/777-01` through `777-10` are **not this
-project's own work**. They are the `net-next v7` revision of the upstream
+project's own work**. They are the `net-next` pre-v7 revision of the upstream
 series submitted as OpenWrt PR [#19644](https://github.com/openwrt/openwrt/pull/19644)
-(`namiltd/openwrt`, branch `Realtek_DSA`). They were written by:
+(`namiltd/openwrt`, branch `Realtek_DSA`) - not yet submitted to `net-next`
+as a formal v7, per the author's own clarification on the OpenWrt forum
+(`t/254876`, post #9): it becomes v7 once the `net-next` merge window
+reopens and the series is formally posted. They were written by:
 
 - **Mieczyslaw Nalewaj** (`namiltd@yahoo.com`) - author of all ten patches
   (`777-01` through `777-10`)
 - **Fabiano Tassotti** (`fabianotassotti@gmail.com`) - co-developed `777-07`
   (`Co-developed-by:`/`Signed-off-by:`)
 
-The following reviewed patches in this v7 revision:
+The following reviewed patches in this pre-v7 revision:
 
 - **Linus Walleij** (`linusw@kernel.org`) - `Reviewed-by` on `777-01`, `777-02`,
   and `777-07`
@@ -33,9 +36,11 @@ The following reviewed patches in this v7 revision:
 
 Each patch file keeps its original `From:`/`Signed-off-by:`/`Reviewed-by:`
 header, which is the authoritative record of authorship and review - see the
-patch files themselves for the exact attribution per patch. This repository
-carries them because the AX23 v2's switch (RTL8367SC, "family D") needs the
-functionality they add, and the DTS in this tree assumes they're applied -
+patch files themselves for the exact attribution per patch.This repository carries them because the AX23 v2's switch (RTL8367S-VB per
+static chip-ID analysis, "family D" - see `KNOWN-ISSUES.md` §1; RTL8367SC is
+only the commercial name printed on the unit, not the driver-level chip
+identity) needs the functionality they add, and the DTS in this tree assumes
+they're applied -
 see [`DEVICE-TREE.md`](DEVICE-TREE.md). They are licensed `GPL-2.0-or-later`
 per the kernel tree they patch; see each patch file for specifics.
 
@@ -43,8 +48,10 @@ per the kernel tree they patch; see each patch file for specifics.
 > an early v1 revision of this same series (eight patches, `777-01` through
 > `777-08`). That revision was also written by Mieczyslaw Nalewaj, with
 > `Fabiano Tassotti` and `Oleg Gavrilov` credited as co-signers on individual
-> patches. It was replaced in full by the v7 revision above - see
-> [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) §8 for what changed between revisions.
+> patches. It was replaced in full by the pre-v7 revision above - see
+> [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) §8 for what changed between revisions,
+> and §8.1-8.2 for how this series relates to the separate, already-merged
+> Johan Alvarado SerDes/PCS series.
 
 ## Hardware access and research credited elsewhere
 
