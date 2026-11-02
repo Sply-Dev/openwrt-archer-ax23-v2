@@ -392,19 +392,26 @@ forward. Neither has been started; this remains `[OPEN]`.
 
 ## 8.3. Direct comparison: this tree's `777-07`/`777-08` already implement Alvarado's `phylink_pcs` model for family D
 
-`[VERIFIED, partial]`, added 2026-11-01. §8.2 above describes the gap as seen
-from PR #19644's own checklist and comment thread (`930-07`/`930-08` flagged
-by Nalewaj as needing a rebase onto the Alvarado/`797` infrastructure, as of
-that thread). This section is a direct source comparison, done independently
-of that thread, between Alvarado's merged series and the `777-07`/`777-08`
-patches this tree actually carries (pre-v7, hashes in §10's revision table).
+`[VERIFIED]`, added 2026-11-01, updated 2026-11-01. §8.2 above describes the
+gap as seen from PR #19644's own checklist and comment thread (`930-07`/
+`930-08` flagged by Nalewaj as needing a rebase onto the Alvarado/`797`
+infrastructure, as of that thread). This section is a direct source
+comparison, done independently of that thread, between Alvarado's merged
+series and the `777-07`/`777-08` patches this tree actually carries (pre-v7,
+hashes in §10's revision table).
 
 **Scope of this comparison:** Alvarado's series has two patches (SGMII base,
-then HSGMII). Only the first (SGMII base) was read and compared in full; the
-second was not pulled, since the SerDes register layer it extends is
-structurally identical to the first and did not appear to change the
-conclusion below. This section should be treated as resting on that first
-patch only, until the second is reviewed.
+then HSGMII). Both have now been read and compared in full. The second
+(HSGMII) turned out to be a small extension of the first, not a separate
+mechanism: it adds a second SerDes tuning table (`rtl8365mb_sds_jam_hsgmii`),
+switches `MAC8_SEL_SGMII_MASK` for `MAC8_SEL_HSGMII_MASK` in the same
+`SDS_MISC_REG` touched by the first patch, generalizes
+`rtl8365mb_interface_is_serdes()` to also accept
+`PHY_INTERFACE_MODE_2500BASEX`, and treats `SPEED_2500` the same as
+`SPEED_1000` in the force-mode speed field (that register has no 2.5G value;
+the actual rate comes from the SerDes's own HSGMII configuration). This
+device uses SGMII 1G, not HSGMII (§4), so the second patch does not apply to
+this device in practice, but it does not change the conclusion below either.
 
 **Finding:** the structure is the same core model, not a divergent
 implementation that still needs porting:
@@ -451,10 +458,8 @@ tracking the upstream PRs (#19644, #25101, #25153) as they consolidate, and
 to resync if a future revision changes the family D logic itself (not just
 renames or splits it).
 
-**Still `[OPEN]`:** Alvarado's second patch (HSGMII) has not been reviewed
-against this tree. All of the above is static source comparison, not a
-hardware result, consistent with the rest of this document's SerDes/pause
-findings, see §4 and §10.
+This is static source comparison, not a hardware result, consistent with the
+rest of this document's SerDes/pause findings, see §4 and §10.
 
 ## 9. Boot slot selection mechanism
 
