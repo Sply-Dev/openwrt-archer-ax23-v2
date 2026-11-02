@@ -36,7 +36,7 @@ The following reviewed patches in this pre-v7 revision:
 
 Each patch file keeps its original `From:`/`Signed-off-by:`/`Reviewed-by:`
 header, which is the authoritative record of authorship and review - see the
-patch files themselves for the exact attribution per patch. This repository carries them because the AX23 v2's switch (RTL8367S-VB per
+patch files themselves for the exact attribution per patch. This repository carries them because the AX23 v2's switch (RTL8367SC per
 static chip-ID analysis, "family D" - see `KNOWN-ISSUES.md` §1; RTL8367SC is
 only the commercial name printed on the unit, not the driver-level chip
 identity) needs the functionality they add, and the DTS in this tree assumes
