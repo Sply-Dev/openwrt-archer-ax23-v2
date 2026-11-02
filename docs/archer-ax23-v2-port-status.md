@@ -47,7 +47,7 @@ Evidence tags used throughout:
 |---|---|---|
 | Device tree | `target/linux/qualcommax/dts/ipq5018-archer-ax23-v2.dts` (445 lines) | See 1.2. `[SOURCE]` |
 | Image definition | `target/linux/qualcommax/image/ipq50xx.mk` | `Device/tplink_archer-ax23-v2`: `FitImageLzma` + `UbiFit`, `DEVICE_DTS_CONFIG := config@mp02.1`, `BLOCKSIZE 128k`, `PAGESIZE 2048`, `NAND_SIZE 128m`, `IMAGE_SIZE 54784k`, `DEVICE_PACKAGES := ath11k-firmware-ipq5018-qcn6122 kmod-dsa-rtl8365mb`, plus an `initramfs-factory.ubi` artifact. `[SOURCE]` |
-| Switch driver patches | `target/linux/generic/pending-6.18/777-01 ... 777-08` | Eight local patches to `rtl8365mb`: detect RTL8367S-VB; set speed, get pvid, set/clear pvid, 4k VLAN, RGMII mode for "family D"; family D SDS13 PCS support; re-latch of the family D SerDes. Not upstream. `[SOURCE]` |
+| Switch driver patches | `target/linux/generic/pending-6.18/777-01 ... 777-08` | Eight local patches to `rtl8365mb`: detect RTL8367SC; set speed, get pvid, set/clear pvid, 4k VLAN, RGMII mode for "family D"; family D SDS13 PCS support; re-latch of the family D SerDes. Not upstream. `[SOURCE]` |
 | Kernel config | `target/linux/qualcommax/config-6.18` | Adds `NET_DSA_REALTEK`, `NET_DSA_REALTEK_MDIO`, `NET_DSA_REALTEK_RTL8365MB` as `=y`, and `SERIAL_AMBA_PL011` + `_CONSOLE` (comment in file: QEMU virt serial console for AX23 initramfs testing). `[SOURCE]` |
 | Preinit | `.../ipq50xx/base-files/lib/preinit/09_mount_tp_data` | Adds `tplink,archer-ax23-v2` to the boards whose `tp_data` UBIFS volume is attached and mounted read-only in preinit. `[SOURCE]` |
 | ath11k caldata | `.../ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata` | AX23 v2 cases: 2.4 GHz from `0:ART` offset `0x1000` (len `0x20000`), MAC = `default-mac` minus 1; 5 GHz (QCN6122) from `0:ART` offset `0x26800` (len `0x20000`), MAC = `default-mac` minus 2. In `HEAD` each case appears twice (see 1.3). `[SOURCE]` |
@@ -146,7 +146,7 @@ but it is currently an unverified choice, not a confirmed-safe one. `[OPEN]`
   unconditional MAC7/EXT1 mux set), not a cosmetic one. Third-party hardware
   validation exists for the upstream series on a different device sharing this
   device's exact chip ID and family (`gusfm` tested v5/v6 on a TP-Link EX511 v2,
-  RTL8367S-VB/`0x6642`, reporting stable 1Gbps SGMII link, 0 FCS/CRC/drop errors,
+  RTL8367SC/`0x6642`, reporting stable 1Gbps SGMII link, 0 FCS/CRC/drop errors,
   working VLAN bridging, and clean reboot cycles) — this is currently the strongest
   third-party hardware evidence available that this patch family works on this
   exact chip, on different hardware. `[SOURCE]`/`[OPEN]`. Pending action: update
@@ -166,7 +166,7 @@ designed to be non-persistent.
 | H0 | Preconditions (not a test) | Console access to the board (UART header JP1; level-shifter SMDs reported removed by the vendor), a way to load an image without flashing, a recovery plan and a backup of the OEM NAND contents. | `[OPEN]` Whether the OEM U-Boot accepts console input and can load a FIT over the network is not established; the non-persistent initramfs path is a hypothesis. |
 | H1 | Non-persistent boot of `initramfs-uImage.itb` | H0 | Kernel starts, serial console output at 115200, userspace reached. |
 | H2 | Kernel log review | H1 | NAND partitions match section 2/S6, no oops/panic, ESS/UNIPHY initialise. |
-| H3 | Switch detection | H1 | rtl8365mb reports chip ID 0x6642 / revision 0x0010 and registers wan, lan1-lan4, cpu, matching the identification already confirmed by static analysis (see R1, [VERIFIED]); ideally also captures the driver's own probe message ("found an RTL8367S-VB switch"). MDIO detection alone does not prove this, nor does it settle R4 (link speed). |
+| H3 | Switch detection | H1 | rtl8365mb reports chip ID 0x6642 / revision 0x0010 and registers wan, lan1-lan4, cpu, matching the identification already confirmed by static analysis (see R1, [VERIFIED]); ideally also captures the driver's own probe message ("found an RTL8367SC switch"). MDIO detection alone does not prove this, nor does it settle R4 (link speed). |
 | H4 | CPU link (GMAC1 to switch port 6, SGMII) | H3 | Link up; ping through a LAN port with static addressing; sustained traffic (e.g. iperf) without errors or link drops. MDIO detection alone does not prove this. |
 | H5 | Physical port mapping | H3 | Each RJ45 port matches its DTS label (cable swap test); negotiated speeds 10/100/1000. |
 | H6 | `tp_data` and MAC | H1 | `tp_data` attaches and mounts read-only in preinit; `default-mac` readable. LAN/WAN MAC assignment additionally needs a `02_network` case (1.5). |
@@ -180,7 +180,7 @@ designed to be non-persistent.
 **Hardware identification**
 
 - R1 `[VERIFIED]` by static analysis, not yet by physical unit. The switch is an
-  RTL8367S-VB ("family D" in Realtek's own driver naming), chip ID `0x6642`, chip
+  RTL8367SC ("family D" in Realtek's own driver naming), chip ID `0x6642`, chip
   revision `0x0010`. This is confirmed by two independent lines of static analysis:
   cross-reference against OpenWrt's legacy `rtl8367b.c` driver (`chip_num=0x6642` /
   `chip_ver=0x0010` maps directly to `RTL8367B_CHIP_RTL8367S_VB`), and the vendor
