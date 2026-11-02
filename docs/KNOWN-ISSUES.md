@@ -406,62 +406,121 @@ install path is writing the inactive `rootfs`/`rootfs_1` slot and then calling
 `platform.sh` case for the sibling `tplink,archer-ax55-v1` board. Not yet implemented
 in this tree, see `TESTING.md` H10.
 
-## 10. `pause` on the GMAC1/CPU-port fixed-link has no effect with the current 777-0x patches
+## 10. `pause` on the GMAC1/CPU-port fixed-link
 
-**Status: [VERIFIED by source inspection, not hardware]**
+**Status:** `[VERIFIED]` by source inspection across three sources — the
+mainline driver, this tree's `777-07`/`777-08` (v7), and their call sites.
+**Not yet confirmed on physical hardware.**
 
-The device tree sets `pause;` on the `fixed-link` nodes of both `&gmac1`
-and `port@6` (CPU port), intending to enable flow control on the 2.5G
-trunk. Third-party reports (AX5x boards, forum) measured ~13% UDP loss
-without it, attributed to the switch being unable to hold a 2.5G GMAC
-back against 1G physical ports.
+> **Correction (2026-11-01):** this section previously concluded pause is
+> inert for family D. That conclusion was based on an earlier (pre-v7)
+> revision of the `777-0x` patches no longer carried in this tree.
+> Re-reading the v7 patches currently in `target/linux/generic/pending-6.18/`
+> shows the opposite: pause for family D goes through a pre-existing,
+> family-agnostic code path that both v1 and the earlier reading of this
+> section missed.
 
-Source inspection of `target/linux/generic/pending-6.18/777-07` and
-`777-08` shows that `rtl8365mb_phylink_mac_link_up()` only writes the
-SerDes pause bits (`RTL8365MB_SDS_MISC_SGMII_TXFC_MASK` /
-`..._RXFC_MASK`) when:
+### Background
 
-    rtl8365mb_interface_is_serdes(interface) &&
-    rtl8365mb_get_family(priv) != RTL8365MB_FAMILY_D
+The device tree sets `pause;` on the `fixed-link` nodes of both `&gmac1` and
+`port@6` (CPU port), intending to enable flow control on the trunk.
+Third-party reports (AX5x boards, forum) measured ~13% UDP loss without it.
 
-Family D is explicitly excluded from this path. A comment in
-`rtl8365mb_pcs_link_up()` (777-07) states that family D instead "forces
-the external MAC ability from mac_link_up(), where the resolved pause
-modes are known," but no such family D code path exists anywhere in the
-777-01 through 777-08 patches currently in this repo. 777-08 only adds
-locking (`sds_lock`) around the existing family-C-only pause block; it
-does not add a family D equivalent.
+### How pause actually reaches the wire
 
-**Practical implication:** the `pause;` property in the DTS is currently
-inert for this chip. It costs nothing to leave it declared (it documents
-intent, and will start working for free if a future patch adds the
-family D path), but it should not be read as "pause is handled, just
-unverified on hardware." It is "pause is not implemented in the driver
-this project currently carries," independent of hardware access.
+Read directly from the mainline driver
+(`drivers/net/dsa/realtek/rtl8365mb_main.c`, upstream `torvalds/linux`, no
+family D patches applied — this function predates the entire `777-0x`
+series).
 
-**Next step, resolved:** checked directly in the pre-v7 patch set now
-carried in this tree (§8). The separate SerDes-conduit patch (upstream
-`797`, formerly `778`) still gates `rtl8365mb_sds_defer_needed()` to
-return `false` for `RTL8365MB_FAMILY_D`, with an explicit comment in
-the patch itself: "Family D has its own answer to the far end coming
-up late, the re-latch work, which also starts from
-`conduit_state_change()`." This confirms, independent of the (v1) vs (pre-v7)
-version question, that `797` is not needed for this device and that
-family D's pause/link-up handling continues to go through the
-`777-08` re-latch path, which still does not program the SerDes pause
-bits for family D. The `pause;` property therefore remains inert on
-this device even with the updated patch set.
+`rtl8365mb_phylink_mac_link_up()` calls, unconditionally for any RGMII or
+SerDes interface:
 
-**Update (2026-10-31):** the Johan Alvarado `net-next` series referenced here
-is not a separate, unrelated line of development - see §8.1 for the full
-picture, which supersedes this paragraph's earlier framing. It has since been
-merged into `net-next` (2026-07-22), reviewed and approved by the same pre-v7
-author (Mieczyslaw Nalewaj) and by Luiz Angelo Daros de Luca, and its chip
-coverage is confirmed family D (per Luiz Angelo's own review comment on the
-series). It remains the only known implementation of a working SerDes pause
-path for this chip family - this tree's `777-0x` patches still do not
-implement one - but "unverified against this device's chip/family" no longer
-applies: the family-D coverage is now confirmed, independent of this exact
-device/SKU still being untested on physical hardware (true of every code path
-in this project, see §8's "Still open"). See §8.1 for what adopting it would
-involve.
+```c
+ret = rtl8365mb_ext_config_forcemode(priv, port, true, speed,
+                                     duplex, tx_pause, rx_pause);
+```
+
+`rtl8365mb_ext_config_forcemode()` itself (mainline, lines ~1624–1697) writes
+the resolved `tx_pause`/`rx_pause` straight into the
+`RTL8365MB_DIGITAL_INTERFACE_FORCE_REG` pause bits, with **no family branch
+of any kind** — this is generic forced-mode configuration that exists for
+every chip this driver supports, including before family D was ever added.
+
+### What the family D patches (`777-07`/`777-08`, v7) actually change
+
+Neither patch touches `rtl8365mb_ext_config_forcemode()` or its call sites in
+`mac_link_up()`/`mac_link_down()` — confirmed by:
+
+```bash
+grep -rn "ext_config_forcemode" target/linux/generic/pending-6.18/777-*.patch
+```
+
+which only matches a comment in `777-07` and an unrelated context line in
+`777-08`.
+
+What they *do* change is the **family-C-only SerDes-level pause path**, a
+second, redundant mechanism (`RTL8365MB_SDS_MISC_SGMII_TXFC_MASK`/
+`..._RXFC_MASK`, written separately in `mac_link_up()` after
+`ext_config_forcemode()` returns). `777-07` gates that second path off for
+family D explicitly:
+
+```c
+if (rtl8365mb_interface_is_serdes(interface) &&
+    rtl8365mb_get_family(priv) != RTL8365MB_FAMILY_D) {
+        u32 val = 0;
+        ...
+```
+
+with the comment:
+
+> *"Family D does not use this path: its pause bits are set in the
+> forced-mode register by `rtl8365mb_ext_config_forcemode()`."*
+
+That comment is accurate and verifiable against the mainline function above
+— it is not describing a missing feature, it is documenting that family D
+doesn't need the family-C-specific second path because the generic one
+already covers it.
+
+### Practical implication, revised
+
+The `pause;` property in the DTS is **not** inert by driver design. The code
+path that honors it (`ext_config_forcemode()`, called from
+`mac_link_up()`/`mac_link_down()` for any RGMII or SerDes port) is
+family-agnostic and has been present in this driver since before family D
+support existed. There is no family D-specific gap in the pause code path,
+as earlier revisions of this section claimed.
+
+### Still `[OPEN]`
+
+This is static analysis, not a hardware result. Nothing here confirms:
+
+- that the far-end link partner honors the pause frames this device would emit,
+- that the register write has the intended effect in practice on this specific chip revision,
+- or that there isn't some runtime interaction (timing, SerDes re-latch state from `777-08`, etc.) that prevents the forced pause bits from taking effect on a real family D part.
+
+This requires a physical unit and UART access to verify (`TESTING.md`,
+blocked on UART per project status). Until then, `pause;` should be read as
+**"implemented in the driver path this tree carries, unverified on
+hardware"** — not "unimplemented."
+
+### Revision note
+
+This correction was found by comparing the pre-v7 patch text this section
+originally cited against the v7 patches actually present in this tree:
+
+| Patch | Hash | Label |
+|---|---|---|
+| `777-07` | `9af9ff10b3f4b49f1a17859022e8cb1ff25f8ae8` | `[PATCH net-next v7 07/10]` |
+| `777-08` | `6d6d9120b8851faa3e33bd48d59340881a75c985` | `[PATCH net-next v7 08/10]` |
+
+then confirmed against mainline.
+
+An earlier draft of this correction, based on PR #25101's `v6` revision
+(hash `a1eb1a7a988b8deefb8828f498b98af5c5fc9bbd` for `777-07`), was caught as
+the wrong revision before being written here — v6 and v7 are functionally
+identical for this specific finding. The only v6→v7 diff is unrelated: a
+`cpu_dp->index` filter added to `rtl8365mb_conduit_state_change()` in
+`777-08`, plus a `Reviewed-by` tag. The hash mismatch is noted so a future
+check against a v8+ revision knows exactly which commit this correction was
+verified against.
