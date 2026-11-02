@@ -69,10 +69,10 @@ Recommended order, since each depends on the previous one succeeding:
    (ESS/UNIPHY) initializes without error.
 4. **H3 — Switch detection.** Confirm `rtl8365mb` reports chip ID `0x6642` / chip
    revision `0x0010` and registers the `wan`/`lan1`–`lan4`/`cpu` ports, and ideally
-   captures the driver's own probe message (`"found an RTL8367S-VB switch"` vs
+   captures the driver's own probe message (`"found an RTL8367SC switch"` vs
    `"found an RTL8367S switch"`). Static analysis (two independent lines of
    evidence, see `docs/RESEARCH.md` and `docs/KNOWN-ISSUES.md` §1) has already
-   identified this chip as RTL8367S-VB, "family D", resolving the earlier `0x6642`
+   identified this chip as RTL8367SC, "family D", resolving the earlier `0x6642`
    vs `0x6367` identification question. What H3 still needs to confirm is that this
    holds on the physical unit, not just in the vendor firmware's own driver, and
    that the switch is actually reachable and functional over MDIO on real hardware,
