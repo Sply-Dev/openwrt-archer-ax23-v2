@@ -390,6 +390,72 @@ re-sync this tree's family D SerDes patches against it, or to attempt the
 which would directly address Nalewaj's stated need for someone to carry this
 forward. Neither has been started; this remains `[OPEN]`.
 
+## 8.3. Direct comparison: this tree's `777-07`/`777-08` already implement Alvarado's `phylink_pcs` model for family D
+
+`[VERIFIED, partial]`, added 2026-11-01. §8.2 above describes the gap as seen
+from PR #19644's own checklist and comment thread (`930-07`/`930-08` flagged
+by Nalewaj as needing a rebase onto the Alvarado/`797` infrastructure, as of
+that thread). This section is a direct source comparison, done independently
+of that thread, between Alvarado's merged series and the `777-07`/`777-08`
+patches this tree actually carries (pre-v7, hashes in §10's revision table).
+
+**Scope of this comparison:** Alvarado's series has two patches (SGMII base,
+then HSGMII). Only the first (SGMII base) was read and compared in full; the
+second was not pulled, since the SerDes register layer it extends is
+structurally identical to the first and did not appear to change the
+conclusion below. This section should be treated as resting on that first
+patch only, until the second is reviewed.
+
+**Finding:** the structure is the same core model, not a divergent
+implementation that still needs porting:
+
+- Same SerDes registers, same names and addresses, in both: `SDS_INDACS_*`,
+  `SDS_MISC_REG`, `SDS_REG_BMCR`, `SDS_REG_NWAY`, `SDS_REG_RESET`,
+  `SDS_REG_LINK_STATUS`.
+- Same approach to the embedded DW8051 microcontroller: held in reset rather
+  than loaded with vendor firmware.
+- Same two-phase BMCR reset sequence for the datapath.
+- Same use of `phylink_pcs` (`pcs_config()`/`pcs_get_state()`/`pcs_link_up()`)
+  as the bring-up model, rather than the vendor's own ad-hoc `mac_config()`
+  path.
+
+**The actual difference found is family coverage, not architecture:**
+Alvarado's series uses `rtl8365mb_sds_write(priv, addr, data)` (no index
+parameter) because it only targets family C, where the SerDes is accessed at
+a single fixed location. `777-07` in this tree already generalizes this to
+`rtl8365mb_sds_write(priv, index, addr, data)`, specifically to address
+`RTL8365MB_D_SDS_EXT0_INDEX = 13`, family D's own SerDes index. Alvarado's
+series has no re-latch logic at all, because that is specifically a family D
+problem; `777-08` in this tree is exactly that re-latch work, and has no
+equivalent in Alvarado's series because family C does not need it (family C's
+version of the same cold-boot problem is instead what PR #25153/`797`
+addresses, per §8 and §8.1).
+
+**Conclusion:** `777-07`/`777-08`, as carried in this tree today, are not an
+old `mac_config`-era implementation waiting to be rebased onto Alvarado's
+`phylink_pcs` model. They already are a `phylink_pcs` implementation,
+extended by `namiltd` specifically to cover family D's indexed SerDes access
+and its re-latch requirement, concepts that do not exist in Alvarado's
+family-C-only series. For this device, there is no pending port of the
+Alvarado model into this tree's patches, that adaptation is already present.
+
+**How this relates to §8.2's gap:** §8.2 is still accurate for what it
+describes, the PR #19644 thread's own tracking of `930-07`/`930-08` against
+the `797` split, and Nalewaj's stated lack of family D hardware. That gap is
+about aligning the *upstream PR's* patch numbering and dependencies once
+PR #25153 lands, not about this tree's `777-07`/`777-08` lacking the
+architecture itself. The practical takeaway for this project is unchanged
+from §8.2's bottom line: there is nothing to rebase in this tree's own copy
+of the family D SerDes patches right now, the remaining work is to keep
+tracking the upstream PRs (#19644, #25101, #25153) as they consolidate, and
+to resync if a future revision changes the family D logic itself (not just
+renames or splits it).
+
+**Still `[OPEN]`:** Alvarado's second patch (HSGMII) has not been reviewed
+against this tree. All of the above is static source comparison, not a
+hardware result, consistent with the rest of this document's SerDes/pause
+findings, see §4 and §10.
+
 ## 9. Boot slot selection mechanism
 
 `[SOURCE]`, resolved, documented here because an earlier version of this tree's DTS
