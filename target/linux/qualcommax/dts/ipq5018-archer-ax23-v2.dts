@@ -7,9 +7,10 @@
  * Flash:  SPI-NAND 128 MB, dual-image (rootfs + rootfs_1)
  * Switch: Realtek RTL8367 family D (chip ID 0x6642 per qca-ssdk.ko
  *         analysis; NOT yet read from the physical unit)
- *         Trunk on GMAC1 -> UNIPHY0 -> CPU port 6, reset GPIO33.
- *         Trunk mode is SGMII 1G -- see the note above &gmac1.
- *         Matches the stock DTB. UNVERIFIED on hardware (no UART yet).
+ *         Trunk on GMAC1 -> UNIPHY0 -> CPU port 6, reset GPIO39.
+ *         Trunk mode is HSGMII 2.5G -- see the note above &gmac1.
+ *         Matches the stock running.dts forced-speed and physical
+ *         clock measurement. UNVERIFIED on hardware (no UART yet).
  * WiFi:   IPQ5018 internal (ath11k) 2.4 GHz
  *         QCN6102 (qcn6122 fw) 5 GHz via PCIe
  * UART:   GPIO28 (RX) / GPIO29 (TX), 115200 8N1, 1.8V
@@ -24,6 +25,21 @@
  *     (physical hardware access, not this project's own) -- OpenWrt forum
  *     thread t/249493, see docs/HARDWARE.md and docs/CREDITS.md
  *   - partition_config/partition-table from rootfs
+ *   - Physical clock measurement on live stock hardware (root shell via
+ *     disclosed LuCI vulnerability, see docs/KNOWN-ISSUES.md): stock
+ *     running.dts has forced-speed = <0x9c4> (2500) on ess-switch port@1;
+ *     /sys/kernel/debug/clk/clk_summary reads gcc_uniphy_tx_clk,
+ *     gcc_uniphy_rx_clk, gcc_gmac1_tx_clk, gcc_gmac1_rx_clk all at
+ *     312,500,000 Hz, which matches HSGMII 2500Base-X line rate
+ *     (312.5 MHz x 10-bit 8b/10b = 3.125 Gbps) and does not match
+ *     SGMII 1G (which would read 125 MHz)
+ *   - Switch reset GPIO read directly from the live device tree on real
+ *     hardware (root shell): /proc/device-tree/soc/ess-instance/
+ *     ess-switch1@1/reset_gpio = 0x27 (GPIO39). This supersedes the
+ *     earlier GPIO33 assumption, which traced back to a UART boot log
+ *     from a different physical unit (community member vram), not a
+ *     direct reading of this device. GPIO33 is confirmed to be the
+ *     2.4GHz LED, with no reset function
  */
 
 /dts-v1/;
@@ -138,44 +154,55 @@
 };
 
 /*
- * Trunk mode (GMAC1 <-> RTL8367 CPU port 6): SGMII 1G.
+ * Trunk mode (GMAC1 <-> RTL8367 CPU port 6): HSGMII 2.5G.
  *
- * This device has five 1G physical ports (WAN + LAN1-4); there is no
- * physical port on this SKU that exceeds 1G, so a 2.5G trunk would have
- * no traffic to carry beyond what SGMII 1G already provides.
+ * This device has five 1G physical ports (WAN + LAN1-4); no single
+ * physical port on this SKU exceeds 1G. An earlier revision of this
+ * DTS used that fact to argue for SGMII 1G instead, reasoning that
+ * MODE_EXT_HSGMII / PORT_SPEED_2500M in the vendor U-Boot
+ * (ipq5018_gmac.c, rtl8367_sw_init()) was generic SDK boilerplate
+ * rather than a deliberate per-board choice, since that routine runs
+ * unconditionally for any board with CONFIG_TP_EXT_SWITCH_RTL8367_ALL.
  *
- * Evidence this port's DTS used to cite for 2.5G (HSGMII), and why it
- * does not hold up:
- *   - Vendor U-Boot (ipq5018_gmac.c, rtl8367_sw_init()) does configure
- *     MODE_EXT_HSGMII / PORT_SPEED_2500M, forced, on EXT_PORT0 and
- *     EXT_PORT1. But this routine runs unconditionally for any board
- *     built with CONFIG_TP_EXT_SWITCH_RTL8367_ALL and an RTL8367 switch
- *     present -- it is not board-specific, and it configures two
- *     extension ports, not this device's single CPU trunk port. This
- *     matches shared Qualcomm/Realtek SDK boilerplate, not a deliberate
- *     per-board choice.
- *   - That same function has a disabled (commented-out) HSGMII signal
- *     fix, with a comment noting "According to rtk AE, these ops have
- *     been included in 1.4.2 driver" -- i.e. TP-Link's own firmware
- *     engineers turned off the HSGMII-specific workaround as obsolete.
- *   - Sibling boards (AX53 v2, AX58 v2, from kuncy7/openwrt-nss-edma)
- *     use 2500base-x, but those boards have 2.5G physical ports, unlike
- *     this device's five 1G ports. The trunk speed there is explained by
- *     their own port hardware, not by anything specific to this device.
+ * That reasoning has been superseded by direct physical measurement.
+ * The stock kernel's running.dts (the config that actually governs
+ * runtime behaviour, not U-Boot's early generic bring-up) sets
+ * forced-speed = <0x9c4> (2500) on this port, and reading
+ * /sys/kernel/debug/clk/clk_summary on live stock hardware shows the
+ * UNIPHY/GMAC1 tx and rx clocks locked at 312,500,000 Hz -- the exact
+ * rate for HSGMII 2500Base-X (312.5 MHz x 10-bit = 3.125 Gbps line
+ * rate), not SGMII 1G (which would be 125 MHz). This is a measurement
+ * of the running system, not an interpretation of static firmware.
  *
- * The stock DTB (the kernel-level config that actually governs runtime
- * behaviour, as opposed to U-Boot's early, generic bring-up) shows
- * phy-mode sgmii, fixed-link speed 1000 on GMAC1. This is the config
- * this DTS now follows. Still UNVERIFIED on physical hardware (no UART
- * yet); if the trunk does not come up, HSGMII 2.5G + a 50 MHz UNIPHY
- * reference (with pause) is the fallback to try, in that order.
+ * Why the OEM would run HSGMII with no single port above 1G is not
+ * fully confirmed: the working theory is that aggregate throughput
+ * across WAN + LAN + 2.4GHz/5GHz WiFi (estimated ~1.75-1.8 Gbps) can
+ * exceed what a 1G trunk allows even though no individual port does,
+ * and since there is no native "1.8G" electrical mode on this
+ * SerDes/switch, HSGMII 2.5G was the only mode that covers it. This
+ * throughput estimate has not been measured or confirmed, and is
+ * noted here as the leading hypothesis, not a proven fact.
+ *
+ * Driver support: patches 777-07/777-08 in this tree already carry
+ * rtl8365mb_d_sds_jam_hsgmii (family D HSGMII tuning table) and the
+ * RTL8365MB_D_SDS_MISC_MODE_HSGMII (0x12) path for
+ * PHY_INTERFACE_MODE_2500BASEX. Upstream precedent: ipq5018-archer-
+ * ax55-v1.dts (same IPQ5018 + RTL8367S + GPIO33 reset topology) uses
+ * this same phy-mode/speed/refclk combination.
+ *
+ * STILL UNVERIFIED on physical hardware (no UART console available
+ * for this build): clock measurement confirms the stock kernel's
+ * configuration, not that this kernel (6.x, DSA, patches 777-0x) will
+ * bring the link up and pass traffic cleanly. If the trunk does not
+ * come up, SGMII 1G (the configuration this DTS used before this
+ * change) is the fallback to try.
  */
 &gmac1 {
 	status = "okay";
-	phy-mode = "sgmii";
+	phy-mode = "2500base-x";
 
 	fixed-link {
-		speed = <1000>;
+		speed = <2500>;
 		full-duplex;
 	};
 };
@@ -184,7 +211,7 @@
 	status = "okay";
 
 	assigned-clocks = <&uniphy0 UNIPHY_CLK_REF>;
-	assigned-clock-rates = <UNIPHY_REFCLK_25MHZ>;
+	assigned-clock-rates = <UNIPHY_REFCLK_50MHZ>;
 };
 
 &mdio0 {
@@ -200,7 +227,7 @@
 		compatible = "realtek,rtl8365mb";
 		reg = <29>;
 
-		reset-gpios = <&tlmm 33 GPIO_ACTIVE_LOW>;
+		reset-gpios = <&tlmm 39 GPIO_ACTIVE_LOW>;
 
 		mdio {
 			compatible = "realtek,smi-mdio";
@@ -266,10 +293,10 @@
 				reg = <6>;
 				label = "cpu";
 				ethernet = <&gmac1>;
-				phy-mode = "sgmii";
+				phy-mode = "2500base-x";
 
 				fixed-link {
-					speed = <1000>;
+					speed = <2500>;
 					full-duplex;
 				};
 			};
