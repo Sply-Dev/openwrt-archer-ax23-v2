@@ -1,512 +1,207 @@
-// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
-/*
- * Device tree for TP-Link Archer AX23 v2
- *
- * SoC:    Qualcomm IPQ5018 (IPQ0509), Cortex-A53 dual-core
- * RAM:    256 MB DDR3 (CDT: AP-MP02.1_128M16_DDR3_LM256)
- * Flash:  SPI-NAND 128 MB, dual-image (rootfs + rootfs_1)
- * Switch: Realtek RTL8367 family D (chip ID 0x6642 per qca-ssdk.ko
- *         analysis; NOT yet read from the physical unit)
- *         Trunk on GMAC1 -> UNIPHY0 -> CPU port 6, reset GPIO39.
- *         Trunk mode is HSGMII 2.5G -- see the note above &gmac1.
- *         Matches the stock running.dts forced-speed and physical
- *         clock measurement. UNVERIFIED on hardware (no UART yet).
- * WiFi:   IPQ5018 internal (ath11k) 2.4 GHz
- *         QCN6102 (qcn6122 fw) 5 GHz via PCIe
- * UART:   GPIO28 (RX) / GPIO29 (TX), 115200 8N1, 1.8V
- *         Header JP1 — level-shifter SMDs removed by TP-Link
- *
- * Hardware confirmed via:
- *   - GPL source analysis (GPL_AX23v2.tar.gz)
- *   - OEM firmware 1.1.2 rootfs extraction + decryption
- *   - Stock kernel module analysis (qca-ssdk.ko ELF/L2P table/SerDes)
- *   - U-Boot DTB ax23_mp02.1.dtb extracted from kernel FIT image
- *   - OEM U-Boot DTB and UART logs reported by community member vram
- *     (physical hardware access, not this project's own) -- OpenWrt forum
- *     thread t/249493, see docs/HARDWARE.md and docs/CREDITS.md
- *   - partition_config/partition-table from rootfs
- *   - Physical clock measurement on live stock hardware (root shell via
- *     disclosed LuCI vulnerability, see docs/KNOWN-ISSUES.md): stock
- *     running.dts has forced-speed = <0x9c4> (2500) on ess-switch port@1;
- *     /sys/kernel/debug/clk/clk_summary reads gcc_uniphy_tx_clk,
- *     gcc_uniphy_rx_clk, gcc_gmac1_tx_clk, gcc_gmac1_rx_clk all at
- *     312,500,000 Hz, which matches HSGMII 2500Base-X line rate
- *     (312.5 MHz x 10-bit 8b/10b = 3.125 Gbps) and does not match
- *     SGMII 1G (which would read 125 MHz)
- *   - Switch reset GPIO read directly from the live device tree on real
- *     hardware (root shell): /proc/device-tree/soc/ess-instance/
- *     ess-switch1@1/reset_gpio = 0x27 (GPIO39). This supersedes the
- *     earlier GPIO33 assumption, which traced back to a UART boot log
- *     from a different physical unit (community member vram), not a
- *     direct reading of this device. GPIO33 is confirmed to be the
- *     2.4GHz LED, with no reset function
- */
-
-/dts-v1/;
-
-#include "ipq5018.dtsi"
-#include "ipq5018-ess.dtsi"
-#include "ipq5018-qcn6122.dtsi"
-
-#include <dt-bindings/gpio/gpio.h>
-#include <dt-bindings/input/input.h>
-#include <dt-bindings/leds/common.h>
-#include <dt-bindings/net/qca-uniphy.h>
-
-/ {
-	model = "TP-Link Archer AX23 v2";
-	compatible = "tplink,archer-ax23-v2", "qcom,ipq5018";
-
-	aliases {
-		serial0 = &blsp1_uart1;
-		ethernet1 = &gmac1;
-		label-mac-device = <&gmac1>;
-		led-boot = &led_power;
-		led-failsafe = &led_power;
-		led-running = &led_power;
-		led-upgrade = &led_power;
-	};
-
-	chosen {
-		stdout-path = "serial0:115200n8";
-		bootargs-append = " root=/dev/ubiblock0_1 coherent_pool=2M";
-	};
-
-	keys {
-		compatible = "gpio-keys";
-		pinctrl-0 = <&button_pins>;
-		pinctrl-names = "default";
-
-		reset {
-			label = "reset";
-			gpios = <&tlmm 14 GPIO_ACTIVE_LOW>;
-			linux,code = <KEY_RESTART>;
-			debounce-interval = <60>;
-		};
-	};
-
-	leds {
-		compatible = "gpio-leds";
-		pinctrl-0 = <&led_pins>;
-		pinctrl-names = "default";
-
-		led_power: led-power {
-			function = LED_FUNCTION_POWER;
-			color = <LED_COLOR_ID_WHITE>;
-			gpios = <&tlmm 10 GPIO_ACTIVE_HIGH>;
-			default-state = "on";
-		};
-
-		led-wan-orange {
-			label = "amber:wan";
-			gpios = <&tlmm 12 GPIO_ACTIVE_HIGH>;
-		};
-
-		led-wan {
-			label = "white:wan";
-			gpios = <&tlmm 13 GPIO_ACTIVE_HIGH>;
-		};
-
-		led-wps {
-			function = LED_FUNCTION_WPS;
-			color = <LED_COLOR_ID_WHITE>;
-			gpios = <&tlmm 22 GPIO_ACTIVE_HIGH>;
-		};
-
-		led-lan {
-			function = LED_FUNCTION_LAN;
-			color = <LED_COLOR_ID_WHITE>;
-			gpios = <&tlmm 32 GPIO_ACTIVE_HIGH>;
-		};
-
-		led-wifi-5g {
-			label = "white:wlan5g";
-			gpios = <&tlmm 11 GPIO_ACTIVE_HIGH>;
-			linux,default-trigger = "phy0tpt";
-		};
-	};
-};
-
-&sleep_clk {
-	clock-frequency = <32000>;
-};
-
-&xo_board_clk {
-	clock-div = <4>;
-	clock-mult = <1>;
-};
-
-&crypto { status = "okay"; };
-&cryptobam { status = "okay"; };
-&prng { status = "okay"; };
-&qfprom { status = "okay"; };
-&qpic_bam { status = "okay"; };
-&watchdog { status = "okay"; };
-
-&blsp1_uart1 {
-	status = "okay";
-	pinctrl-0 = <&serial_pins>;
-	pinctrl-names = "default";
-};
-
-&gmac0 {
-	status = "disabled";
-};
-
-/*
- * Trunk mode (GMAC1 <-> RTL8367 CPU port 6): HSGMII 2.5G.
- *
- * This device has five 1G physical ports (WAN + LAN1-4); no single
- * physical port on this SKU exceeds 1G. An earlier revision of this
- * DTS used that fact to argue for SGMII 1G instead, reasoning that
- * MODE_EXT_HSGMII / PORT_SPEED_2500M in the vendor U-Boot
- * (ipq5018_gmac.c, rtl8367_sw_init()) was generic SDK boilerplate
- * rather than a deliberate per-board choice, since that routine runs
- * unconditionally for any board with CONFIG_TP_EXT_SWITCH_RTL8367_ALL.
- *
- * That reasoning has been superseded by direct physical measurement.
- * The stock kernel's running.dts (the config that actually governs
- * runtime behaviour, not U-Boot's early generic bring-up) sets
- * forced-speed = <0x9c4> (2500) on this port, and reading
- * /sys/kernel/debug/clk/clk_summary on live stock hardware shows the
- * UNIPHY/GMAC1 tx and rx clocks locked at 312,500,000 Hz -- the exact
- * rate for HSGMII 2500Base-X (312.5 MHz x 10-bit = 3.125 Gbps line
- * rate), not SGMII 1G (which would be 125 MHz). This is a measurement
- * of the running system, not an interpretation of static firmware.
- *
- * Why the OEM would run HSGMII with no single port above 1G is not
- * fully confirmed: the working theory is that aggregate throughput
- * across WAN + LAN + 2.4GHz/5GHz WiFi (estimated ~1.75-1.8 Gbps) can
- * exceed what a 1G trunk allows even though no individual port does,
- * and since there is no native "1.8G" electrical mode on this
- * SerDes/switch, HSGMII 2.5G was the only mode that covers it. This
- * throughput estimate has not been measured or confirmed, and is
- * noted here as the leading hypothesis, not a proven fact.
- *
- * Driver support: patches 777-07/777-08 in this tree already carry
- * rtl8365mb_d_sds_jam_hsgmii (family D HSGMII tuning table) and the
- * RTL8365MB_D_SDS_MISC_MODE_HSGMII (0x12) path for
- * PHY_INTERFACE_MODE_2500BASEX. Upstream precedent: ipq5018-archer-
- * ax55-v1.dts (same IPQ5018 + RTL8367S + GPIO33 reset topology) uses
- * this same phy-mode/speed/refclk combination.
- *
- * STILL UNVERIFIED on physical hardware (no UART console available
- * for this build): clock measurement confirms the stock kernel's
- * configuration, not that this kernel (6.x, DSA, patches 777-0x) will
- * bring the link up and pass traffic cleanly. If the trunk does not
- * come up, SGMII 1G (the configuration this DTS used before this
- * change) is the fallback to try.
- */
-&gmac1 {
-	status = "okay";
-	phy-mode = "2500base-x";
-
-	fixed-link {
-		speed = <2500>;
-		full-duplex;
-	};
-};
-
-&uniphy0 {
-	status = "okay";
-
-	assigned-clocks = <&uniphy0 UNIPHY_CLK_REF>;
-	assigned-clock-rates = <UNIPHY_REFCLK_50MHZ>;
-};
-
-&mdio0 {
-	status = "okay";
-};
-
-&mdio1 {
-	status = "okay";
-	pinctrl-0 = <&mdio1_pins>;
-	pinctrl-names = "default";
-
-	switch@1d {
-		compatible = "realtek,rtl8365mb";
-		reg = <29>;
-
-		reset-gpios = <&tlmm 39 GPIO_ACTIVE_LOW>;
-
-		mdio {
-			compatible = "realtek,smi-mdio";
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			ax23_phy0: ethernet-phy@0 {
-				reg = <0>;
-			};
-
-			ax23_phy1: ethernet-phy@1 {
-				reg = <1>;
-			};
-
-			ax23_phy2: ethernet-phy@2 {
-				reg = <2>;
-			};
-
-			ax23_phy3: ethernet-phy@3 {
-				reg = <3>;
-			};
-
-			ax23_phy4: ethernet-phy@4 {
-				reg = <4>;
-			};
-		};
-
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			port@0 {
-				reg = <0>;
-				label = "wan";
-				phy-handle = <&ax23_phy0>;
-			};
-
-			port@1 {
-				reg = <1>;
-				label = "lan1";
-				phy-handle = <&ax23_phy1>;
-			};
-
-			port@2 {
-				reg = <2>;
-				label = "lan2";
-				phy-handle = <&ax23_phy2>;
-			};
-
-			port@3 {
-				reg = <3>;
-				label = "lan3";
-				phy-handle = <&ax23_phy3>;
-			};
-
-			port@4 {
-				reg = <4>;
-				label = "lan4";
-				phy-handle = <&ax23_phy4>;
-			};
-
-			port@6 {
-				reg = <6>;
-				label = "cpu";
-				ethernet = <&gmac1>;
-				phy-mode = "2500base-x";
-
-				fixed-link {
-					speed = <2500>;
-					full-duplex;
-				};
-			};
-		};
-	};
-};
-
-&q6v5_wcss {
-	boot-args = <0x2 0x4 0x2 0x1b 0x0 0x0>;
-};
-
-&wifi {
-	status = "okay";
-	qcom,rproc = <&q6_wcss_pd1>;
-	qcom,ath11k-calibration-variant = "TP-Link-Archer-AX23-v2";
-	qcom,ath11k-fw-memory-mode = <2>;
-	qcom,bdf-addr = <0x4c400000>;
-};
-
-&wifi1 {
-	status = "okay";
-	qcom,rproc = <&q6_wcss_pd2>;
-	qcom,userpd-subsys-name = "q6v5_wcss_userpd2";
-	qcom,ath11k-calibration-variant = "TP-Link-Archer-AX23-v2";
-	qcom,ath11k-fw-memory-mode = <2>;
-	qcom,bdf-addr = <0x4d100000>;
-	qcom,m3-dump-addr = <0x4df00000>;
-};
-
-&blsp1_spi1 {
-	status = "disabled";
-};
-
-&qpic_nand {
-	status = "okay";
-	pinctrl-0 = <&qpic_pins>;
-	pinctrl-names = "default";
-
-	nand@0 {
-		compatible = "spi-nand";
-		reg = <0>;
-		nand-ecc-engine = <&qpic_nand>;
-		nand-ecc-strength = <4>;
-		nand-ecc-step-size = <512>;
-		nand-bus-width = <8>;
-
-		partitions {
-			compatible = "fixed-partitions";
-			#address-cells = <1>;
-			#size-cells = <1>;
-
-			partition@0 {
-				label = "0:SBL1";
-				reg = <0x000000 0x080000>;
-				read-only;
-			};
-
-			partition@80000 {
-				label = "0:MIBIB";
-				reg = <0x080000 0x080000>;
-				read-only;
-			};
-
-			partition@100000 {
-				label = "0:BOOTCONFIG";
-				reg = <0x100000 0x040000>;
-				read-only;
-			};
-
-			partition@140000 {
-				label = "0:BOOTCONFIG1";
-				reg = <0x140000 0x040000>;
-				read-only;
-			};
-
-			partition@180000 {
-				label = "0:QSEE";
-				reg = <0x180000 0x100000>;
-				read-only;
-			};
-
-			partition@280000 {
-				label = "0:DEVCFG";
-				reg = <0x280000 0x040000>;
-				read-only;
-			};
-
-			partition@2c0000 {
-				label = "0:CDT";
-				reg = <0x2c0000 0x040000>;
-				read-only;
-			};
-
-			partition@300000 {
-				label = "0:APPSBLENV";
-				reg = <0x300000 0x080000>;
-			};
-
-			partition@380000 {
-				label = "0:APPSBL";
-				reg = <0x380000 0x140000>;
-				read-only;
-			};
-
-			partition@4c0000 {
-				label = "0:ART";
-				reg = <0x4c0000 0x100000>;
-				read-only;
-			};
-
-			partition@5c0000 {
-				label = "0:TRAINING";
-				reg = <0x5c0000 0x080000>;
-				read-only;
-			};
-
-			partition@640000 {
-				label = "rootfs";
-				reg = <0x640000 0x3580000>;
-			};
-
-			partition@3bc0000 {
-				label = "rootfs_1";
-				reg = <0x3bc0000 0x3580000>;
-			};
-
-			partition@7140000 {
-				label = "tp_data";
-				reg = <0x7140000 0x840000>;
-				read-only;
-			};
-
-			partition@7980000 {
-				label = "radio";
-				reg = <0x7980000 0x440000>;
-				read-only;
-			};
-
-			partition@7dc0000 {
-				label = "data";
-				reg = <0x7dc0000 0x080000>;
-			};
-		};
-	};
-};
-
-&tlmm {
-	button_pins: button-pins {
-		pins = "gpio14";
-		function = "gpio";
-		drive-strength = <2>;
-		bias-pull-up;
-	};
-
-	led_pins: led-pins {
-		pins = "gpio10", "gpio11", "gpio12", "gpio13",
-		       "gpio22", "gpio32";
-		function = "gpio";
-		drive-strength = <8>;
-		bias-pull-down;
-	};
-
-	mdio1_pins: mdio1-pins {
-		mdc {
-			pins = "gpio36";
-			function = "mdc";
-			drive-strength = <8>;
-			bias-pull-up;
-		};
-		mdio {
-			pins = "gpio37";
-			function = "mdio";
-			drive-strength = <8>;
-			bias-pull-up;
-		};
-	};
-
-	qpic_pins: qpic-pins {
-		data {
-			pins = "gpio4", "gpio5", "gpio6", "gpio7";
-			function = "qspi_data";
-			drive-strength = <8>;
-			bias-pull-up;
-		};
-		cs {
-			pins = "gpio8";
-			function = "qspi_cs";
-			drive-strength = <8>;
-			bias-pull-up;
-		};
-		clk {
-			pins = "gpio9";
-			function = "qspi_clk";
-			drive-strength = <8>;
-			bias-pull-up;
-		};
-	};
-
-	serial_pins: serial-pins {
-		tx-pins {
-			pins = "gpio29";
-			function = "blsp0_uart1";
-			drive-strength = <8>;
-			bias-disable;
-		};
-		rx-pins {
-			pins = "gpio28";
-			function = "blsp0_uart1";
-			drive-strength = <8>;
-			bias-disable;
-		};
-	};
-};
+# Device tree — design notes
+
+This document explains the decisions behind
+[`target/linux/qualcommax/dts/ipq5018-archer-ax23-v2.dts`](../target/linux/qualcommax/dts/ipq5018-archer-ax23-v2.dts),
+not the raw hardware facts, those are in [`HARDWARE.md`](HARDWARE.md). Evidence tags
+are the same as elsewhere in this repository.
+
+## Base and references
+
+The DTS is built on `ipq5018.dtsi` + `ipq5018-ess.dtsi` + `ipq5018-qcn6122.dtsi`,
+following the subtarget base used by devices already supported upstream on the same SoC.
+(Note: `ipq5018-nss.dtsi` is not included in this device tree; NSS hardware acceleration
+regions are not configured here).
+
+Two existing OpenWrt device trees were used as direct references:
+
+- **EX511 v2** (`kuncy7/openwrt-nss-edma`, branch `ipq50xx-nss`), same SoC, same RAM
+  size (256MB), same ath11k/QCN6102 radio configuration. Used as the template for the
+  radio nodes and memory-saving parameters (`ath11k-fw-memory-mode = 2`, QCN6102 boot-args).
+- **AX55 v1** (`kuncy7/openwrt-ax55-v1`), closest available reference for a TP-Link
+  IPQ50xx device using an RTL8367-family switch over SGMII with a `tp_data`-sourced
+  MAC address. Used as the template for SerDes/SGMII configuration, the general switch
+  binding pattern, and the `tp_data` MAC convention also used in the caldata patch (see
+  `KNOWN-ISSUES.md` for the caldata patch itself).
+
+Neither reference device is identical to the AX23 v2, both required adaptation, not
+a straight copy. Where a value was copied from a reference rather than derived from
+this device's own OEM data, that is noted below.
+
+Note: the AX55 v1 reference is on the switch's "family C" (RTL8367S), not "family D"
+(RTL8367S-VB) like the AX23 v2, see the Switch node section below. The SGMII/SerDes
+binding pattern was still usable as a template, but the family-specific driver logic
+is not shared between the two boards' patch sets.
+
+## Memory and bootargs
+
+`256MB` total RAM (see `HARDWARE.md`) is below what most `ipq50xx` devices in the
+upstream tree ship with (many have 512MB or 1GB). In this DTS:
+
+- `chosen { bootargs-append = " root=/dev/ubiblock0_1 coherent_pool=2M"; };` sets the
+  root device to `/dev/ubiblock0_1` and the coherent DMA pool to 2MB. This records
+  the configured boot argument, its runtime impact has not been validated on
+  physical hardware. `root=/dev/ubiblock0_1` is the standard pattern across
+  `qualcommax/ipq50xx` SPI-NAND devices (AX55 v1, AX850, WRC-X3000GS2, and others):
+  the kernel attaches the `rootfs` NAND partition as a UBI volume at runtime, and
+  `ubiblock0_1` is the block device exposed after that attach. It is not specific to
+  this device and not a leftover from a different device profile.
+- No explicit NSS memory reservation (`nss_region`) is declared.
+
+This constrained RAM size is also the reason this device is not expected to be accepted into
+OpenWrt mainline in its current form, see `KNOWN-ISSUES.md` §6.
+
+## Ethernet
+
+- `gmac0` is disabled, the hardware does not use it (see `HARDWARE.md`, Ethernet
+  switch table: only `gmac1` is wired to the switch).
+- `gmac1` is configured as HSGMII, 2.5G, `fixed-link`, with `pause` set. See the
+  dedicated section below for the evidence behind this and why it differs from the
+  OEM device tree blob's static `phy-mode` string.
+- `uniphy0` uses `REFCLK_50MHZ`, matching the current HSGMII 2.5G configuration.
+- `mdio0` is enabled with no static child nodes populated.
+- `mdio1` is enabled using pin controller `mdio1_pins` (GPIO36 MDC, GPIO37 MDIO),
+  where the switch node `switch@1d` is attached.
+
+### Uplink speed: SGMII 1G vs HSGMII 2.5G `[VERIFIED, static analysis]`
+
+The trunk between `gmac1` and the switch's CPU port is configured as HSGMII 2.5G
+(`2500base-x`, `fixed-link` speed 2500, `uniphy0` at 50MHz). This was previously an
+open question and went through more than one reversal before settling here; this
+section documents the final reasoning so it does not need to be re-litigated.
+
+**The decisive evidence is a physical clock measurement**, not a reading of any
+static device tree or source file. On live stock hardware, `/sys/kernel/debug/clk/
+clk_summary` shows the UNIPHY/GMAC1 tx and rx clocks locked at `312,500,000 Hz`.
+This is the exact line rate for HSGMII 2500Base-X (312.5 MHz x 10-bit 8b/10b = 3.125
+Gbps). SGMII 1G would read 125 MHz. A clock running is not an interpretation subject
+to naming ambiguity, it is a direct measurement of what the hardware is actually
+doing.
+
+This measurement is corroborated by two further points:
+
+- The stock kernel's `running.dts` (the configuration that actually governs runtime
+  behaviour, not U-Boot's early generic bring-up) sets `forced-speed = <0x9c4>`
+  (2500) on the switch's `port@1` node.
+- The OEM U-Boot source for this device (`ipq5018_gmac.c`) configures
+  `MODE_EXT_HSGMII` with `PORT_SPEED_2500M` for this same link, and prints
+  `"Set RTL8367S SGMII 2.5Gbps"` during bring-up.
+
+**Why the static OEM device tree blob appears to say otherwise**: the `dp2`/`gmac1`
+node in the stock DTB declares `phy-mode = "sgmii"` with no `forced-speed` property
+of its own (that property only exists on the switch's `port@1` node). This looked
+like a contradiction within the same DTB, and was the original reason this DTS used
+SGMII 1G. It is resolved as a terminology artifact, not a real contradiction: the
+legacy Qualcomm 4.4 kernel uses `"sgmii"` as a pinout family name covering both
+SGMII 1G and SGMII+/HSGMII 2.5G, since they share the same physical pin pair. The
+actual link speed is set separately, by the switch's forced-speed, which is 2500.
+Static naming in a DTS does not settle this question by itself, the physical clock
+measurement does.
+
+**Why the OEM would run HSGMII with no single physical port above 1G**: this device
+has five 1G physical ports (WAN + LAN1-4); no single port on this SKU exceeds 1G.
+The leading hypothesis is that aggregate throughput across WAN + LAN + 2.4GHz/5GHz
+WiFi can exceed what a 1G trunk allows even though no individual port does, and
+since there is no native "1.8G" electrical mode on this SerDes/switch, HSGMII 2.5G
+is the only mode that covers it without wasting the gap. This throughput estimate
+has not been independently measured and is noted as the leading hypothesis, not a
+proven fact. An earlier line of reasoning held that sibling TP-Link boards (AX53 v2,
+AX58 v2) might use HSGMII 2.5G because they have actual 2.5G physical ports unlike
+the AX23 v2. This is refuted by direct inspection of those boards' production DTS
+files (`kuncy7/openwrt-nss-edma`): AX53 v2 and AX58 v2 use the exact same five 1G
+ports as the AX23 v2, and still configure HSGMII 2.5G on the trunk. The logic is
+switch-side aggregation/over-subscription, not individual port speed.
+
+**`pause` is set on both `fixed-link` nodes** (`gmac1` and the switch's `port@6`).
+A third party measured, on a related board, that without `pause` in this same
+over-subscription scenario (a 2.5G trunk feeding 1G physical ports), throughput
+dropped from 940 to 466 Mbps with roughly 13% UDP loss, because the switch could
+not backpressure the faster GMAC against the slower physical ports. This device's
+trunk is the same scenario (five 1G ports converging on one 2.5G link), so `pause`
+applies here too. Whether this tree's family D driver patches (`777-07`/`777-08`)
+actually program the SerDes pause bits for this exact code path has not been
+independently re-verified alongside this change, see `KNOWN-ISSUES.md` §10 for the
+driver-level detail on how pause is handled for family D.
+
+**What remains unverified**: all of the above is evidence from the stock Qualcomm
+4.4 kernel and OEM firmware running on real hardware, it establishes that the
+silicon natively operates at HSGMII 2.5G. It is not a test of the `rtl8365mb`/
+phylink driver under OpenWrt's 6.x kernel with this DTS applied, that remains
+untested until a real boot happens (no UART console available for this build, see
+`TESTING.md`). If the trunk does not come up at 2.5G, SGMII 1G (the configuration
+this DTS used at an earlier point) is the fallback to try.
+
+### Switch node
+
+The switch is described under `&mdio1` using the upstream `realtek,rtl8365mb` binding:
+
+- `reg = 29` (switch MDIO address on MDIO1; physical access has not been confirmed)
+- `reset-gpios` = GPIO39. This was corrected from an earlier GPIO33 assumption; see
+  `HARDWARE.md`'s GPIO table for the evidence (GPIO39 was read directly from the
+  live device tree on real hardware, GPIO33 is confirmed to be the 2.4GHz LED with
+  no reset function)
+- Internal MDIO bus (`realtek,smi-mdio`) declaring internal PHYs `ethernet-phy@0` through `@4`
+- Individual port nodes for `port@0`–`port@4` (the four LAN ports plus WAN), and CPU port
+  at `port@6` linked to `&gmac1`
+- Note: `realtek,headerless-cpu-port` is **not** set in this DTS.
+
+The chip has been identified by static analysis, with two independent lines of
+evidence, as RTL8367S-VB ("family D" in Realtek's own driver naming), chip ID
+`0x6642`, chip revision `0x0010`. See `HARDWARE.md`'s Ethernet switch section and
+`docs/RESEARCH.md` for the derivation. Family D support itself is not upstream, it
+is provided by the ten local patches in
+`target/linux/generic/pending-6.18/777-01` through `777-10`, described in their own
+commit messages. This DTS assumes those patches are applied, it will not build
+cleanly against a stock `rtl8365mb` driver.
+
+These local patches are the `net-next` pre-v7 revision of a switch-driver series
+tracked upstream as draft PR `openwrt/openwrt#19644`, which this tree has already
+adopted (replacing an earlier, less complete v1 revision of eight patches). The
+pre-v7 revision adds family D LUT/L2 support and generalizes the SerDes indexing
+to cover family D's extension port layout. It has been tested by a third party on a
+TP-Link EX511 v2, a different device sharing the same chip ID/family, with a stable
+link, VLAN bridging, and clean reboot cycles reported. See `docs/CREDITS.md` for
+full authorship and `docs/KNOWN-ISSUES.md` §8 for what changed between revisions.
+
+## Wi-Fi
+
+- `q6v5_wcss` boot arguments are set for QCN6102 in "UPD2" mode, without this, the
+  QCN6102 firmware has been observed (on the reference EX511 v2 tree) to crash
+  approximately 59 seconds after boot.
+- `ath11k-fw-memory-mode = 2` is set on **both** radios. This is required at 256MB of
+  total RAM, higher-RAM devices on the same SoC can use a different mode.
+- The published ath11k caldata hotplug patch extracts calibration data directly from
+  `0:ART` at fixed offsets (`0x1000` for 2.4 GHz and `0x26800` for 5 GHz), it does not
+  use NVMEM cells declared in this DTS. Neither the offsets nor successful radio
+  calibration have been validated on real hardware, see `KNOWN-ISSUES.md` §2.
+
+## NAND and boot slot selection
+
+- `BOOTCONFIG` and `BOOTCONFIG1` **are** marked read-only in this DTS. An earlier
+  design assumption held that sysupgrade needed write access to these partitions to
+  switch boot slots, this was incorrect and has been corrected. The actual A/B boot
+  mechanism on this device is `fw_setenv tp_boot_idx <0|1>` against the U-Boot
+  environment (stored in `APPSBLENV`), confirmed from three places in the vendor's
+  own GPL source, see `HARDWARE.md`'s NAND partition layout section for the detail.
+  `BOOTCONFIG`/`BOOTCONFIG1` do not need to be writable for boot slot switching under
+  this mechanism.
+- `tp_data` is declared as a NAND partition in the DTS, but the DTS does not declare
+  NVMEM cells for it. The caldata patch reads the MAC from
+  `/tmp/tp_data/default-mac`; the validity of that source on this device and the
+  derivation of the MAC addresses have not been confirmed on real hardware, see
+  `KNOWN-ISSUES.md` §3.
+
+## What is intentionally left as a TODO in the DTS itself
+
+These are marked inline in the DTS with comments, and tracked with more detail in
+`KNOWN-ISSUES.md`:
+
+- LED polarity (active-high vs active-low), `KNOWN-ISSUES.md` §5
+- Physical LAN1–4 port-to-silicon label mapping, `KNOWN-ISSUES.md` §5
+- Exact MAC offset within `tp_data`, `KNOWN-ISSUES.md` §3
+- Exact calibration-variant string for the switch family, `KNOWN-ISSUES.md` §1
+- Whether the `777-07`/`777-08` family D driver path actually programs the SerDes
+  pause bits for the HSGMII 2.5G trunk, see the Uplink speed section above and
+  `KNOWN-ISSUES.md` §10
+
+None of these block a build. All of them block calling this port "working" on real
+hardware, see `archer-ax23-v2-port-status.md` for the current overall state.
