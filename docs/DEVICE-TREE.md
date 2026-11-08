@@ -54,47 +54,91 @@ OpenWrt mainline in its current form, see `KNOWN-ISSUES.md` §6.
 
 - `gmac0` is disabled, the hardware does not use it (see `HARDWARE.md`, Ethernet
   switch table: only `gmac1` is wired to the switch).
-- `gmac1` is configured as SGMII, 1G, `fixed-link`, matching the OEM device tree
-  blob extracted from this unit's own stock firmware. **This is disputed**, see the
-  caveat below.
-- `uniphy0` uses `REFCLK_25MHZ`, matching the current SGMII 1G configuration.
+- `gmac1` is configured as HSGMII, 2.5G, `fixed-link`, with `pause` set. See the
+  dedicated section below for the evidence behind this and why it differs from the
+  OEM device tree blob's static `phy-mode` string.
+- `uniphy0` uses `REFCLK_50MHZ`, matching the current HSGMII 2.5G configuration.
 - `mdio0` is enabled with no static child nodes populated.
 - `mdio1` is enabled using pin controller `mdio1_pins` (GPIO36 MDC, GPIO37 MDIO),
   where the switch node `switch@1d` is attached.
 
-### Uplink speed: SGMII 1G vs HSGMII 2.5G `[OPEN]`
+### Uplink speed: SGMII 1G vs HSGMII 2.5G `[VERIFIED, static analysis]`
 
-The current DTS configuration (SGMII, fixed 1000Mbps, 25MHz reference clock) matches
-the `phy-mode` and `fixed-link` speed found in the OEM device tree blob extracted
-from this device's own stock firmware. However, two independent sources point the
-other way:
+The trunk between `gmac1` and the switch's CPU port is configured as HSGMII 2.5G
+(`2500base-x`, `fixed-link` speed 2500, `uniphy0` at 50MHz). This was previously an
+open question and went through more than one reversal before settling here; this
+section documents the final reasoning so it does not need to be re-litigated.
 
+**The decisive evidence is a physical clock measurement**, not a reading of any
+static device tree or source file. On live stock hardware, `/sys/kernel/debug/clk/
+clk_summary` shows the UNIPHY/GMAC1 tx and rx clocks locked at `312,500,000 Hz`.
+This is the exact line rate for HSGMII 2500Base-X (312.5 MHz x 10-bit 8b/10b = 3.125
+Gbps). SGMII 1G would read 125 MHz. A clock running is not an interpretation subject
+to naming ambiguity, it is a direct measurement of what the hardware is actually
+doing.
+
+This measurement is corroborated by two further points:
+
+- The stock kernel's `running.dts` (the configuration that actually governs runtime
+  behaviour, not U-Boot's early generic bring-up) sets `forced-speed = <0x9c4>`
+  (2500) on the switch's `port@1` node.
 - The OEM U-Boot source for this device (`ipq5018_gmac.c`) configures
-  `MODE_EXT_HSGMII` with `PORT_SPEED_2500M` for this same link.
-- Production OpenWrt DTS files for sibling TP-Link boards on the same IPQ5018 +
-  RTL8367-family switch platform (AX53 v2, AX58 v2, from `kuncy7/openwrt-nss-edma`)
-  use `2500base-x` with a 50MHz reference clock, not SGMII at 25MHz.
+  `MODE_EXT_HSGMII` with `PORT_SPEED_2500M` for this same link, and prints
+  `"Set RTL8367S SGMII 2.5Gbps"` during bring-up.
 
-`kuncy7` additionally reported that getting this link reliable on related boards
-needed a `pause` property in the `fixed-link` node; without it, roughly 13% UDP loss
-was measured by a third party when the switch could not backpressure the 2.5G GMAC
-against 1G physical ports. The current DTS does not have a `pause` property on
-`gmac1`'s `fixed-link`.
+**Why the static OEM device tree blob appears to say otherwise**: the `dp2`/`gmac1`
+node in the stock DTB declares `phy-mode = "sgmii"` with no `forced-speed` property
+of its own (that property only exists on the switch's `port@1` node). This looked
+like a contradiction within the same DTB, and was the original reason this DTS used
+SGMII 1G. It is resolved as a terminology artifact, not a real contradiction: the
+legacy Qualcomm 4.4 kernel uses `"sgmii"` as a pinout family name covering both
+SGMII 1G and SGMII+/HSGMII 2.5G, since they share the same physical pin pair. The
+actual link speed is set separately, by the switch's forced-speed, which is 2500.
+Static naming in a DTS does not settle this question by itself, the physical clock
+measurement does.
 
-Neither side of this is confirmed on physical AX23 v2 hardware. The OEM DTB
-reflects what the vendor's own Linux 4.4 kernel was configured for, which is not
-necessarily the ceiling of what the silicon supports, vendors sometimes run links
-below their maximum negotiated speed. Resolving this requires either a boot log
-showing the negotiated link speed (test H3/H4 in `TESTING.md`) or a definitive
-read of the UNIPHY/SerDes PCS mode registers. See `docs/RESEARCH.md`'s SGMII/CPU
-port bring-up section and `docs/KNOWN-ISSUES.md` §4.
+**Why the OEM would run HSGMII with no single physical port above 1G**: this device
+has five 1G physical ports (WAN + LAN1-4); no single port on this SKU exceeds 1G.
+The leading hypothesis is that aggregate throughput across WAN + LAN + 2.4GHz/5GHz
+WiFi can exceed what a 1G trunk allows even though no individual port does, and
+since there is no native "1.8G" electrical mode on this SerDes/switch, HSGMII 2.5G
+is the only mode that covers it without wasting the gap. This throughput estimate
+has not been independently measured and is noted as the leading hypothesis, not a
+proven fact. An earlier line of reasoning held that sibling TP-Link boards (AX53 v2,
+AX58 v2) might use HSGMII 2.5G because they have actual 2.5G physical ports unlike
+the AX23 v2. This is refuted by direct inspection of those boards' production DTS
+files (`kuncy7/openwrt-nss-edma`): AX53 v2 and AX58 v2 use the exact same five 1G
+ports as the AX23 v2, and still configure HSGMII 2.5G on the trunk. The logic is
+switch-side aggregation/over-subscription, not individual port speed.
+
+**`pause` is set on both `fixed-link` nodes** (`gmac1` and the switch's `port@6`).
+A third party measured, on a related board, that without `pause` in this same
+over-subscription scenario (a 2.5G trunk feeding 1G physical ports), throughput
+dropped from 940 to 466 Mbps with roughly 13% UDP loss, because the switch could
+not backpressure the faster GMAC against the slower physical ports. This device's
+trunk is the same scenario (five 1G ports converging on one 2.5G link), so `pause`
+applies here too. Whether this tree's family D driver patches (`777-07`/`777-08`)
+actually program the SerDes pause bits for this exact code path has not been
+independently re-verified alongside this change, see `KNOWN-ISSUES.md` §10 for the
+driver-level detail on how pause is handled for family D.
+
+**What remains unverified**: all of the above is evidence from the stock Qualcomm
+4.4 kernel and OEM firmware running on real hardware, it establishes that the
+silicon natively operates at HSGMII 2.5G. It is not a test of the `rtl8365mb`/
+phylink driver under OpenWrt's 6.x kernel with this DTS applied, that remains
+untested until a real boot happens (no UART console available for this build, see
+`TESTING.md`). If the trunk does not come up at 2.5G, SGMII 1G (the configuration
+this DTS used at an earlier point) is the fallback to try.
 
 ### Switch node
 
 The switch is described under `&mdio1` using the upstream `realtek,rtl8365mb` binding:
 
 - `reg = 29` (switch MDIO address on MDIO1; physical access has not been confirmed)
-- `reset-gpios` = GPIO33, matching the shared LED/reset GPIO in `HARDWARE.md`
+- `reset-gpios` = GPIO39. This was corrected from an earlier GPIO33 assumption; see
+  `HARDWARE.md`'s GPIO table for the evidence (GPIO39 was read directly from the
+  live device tree on real hardware, GPIO33 is confirmed to be the 2.4GHz LED with
+  no reset function)
 - Internal MDIO bus (`realtek,smi-mdio`) declaring internal PHYs `ethernet-phy@0` through `@4`
 - Individual port nodes for `port@0`–`port@4` (the four LAN ports plus WAN), and CPU port
   at `port@6` linked to `&gmac1`
@@ -104,17 +148,19 @@ The chip has been identified by static analysis, with two independent lines of
 evidence, as RTL8367S-VB ("family D" in Realtek's own driver naming), chip ID
 `0x6642`, chip revision `0x0010`. See `HARDWARE.md`'s Ethernet switch section and
 `docs/RESEARCH.md` for the derivation. Family D support itself is not upstream, it
-is provided by the eight local patches in
-`target/linux/generic/pending-6.18/777-01` through `777-08`, described in their own
+is provided by the ten local patches in
+`target/linux/generic/pending-6.18/777-01` through `777-10`, described in their own
 commit messages. This DTS assumes those patches are applied, it will not build
 cleanly against a stock `rtl8365mb` driver.
 
-These local patches are an earlier revision (v1) of a switch-driver series that has
-since progressed further upstream as draft PR `openwrt/openwrt#19644` (v5/v6), which
-adds family D LUT/L2 support (not present in this tree's `777-0x` patches) and has
-been tested by a third party on a TP-Link EX511 v2, a different device sharing the
-same chip ID/family. Updating this tree's patches to that later revision is tracked
-as a pending item, not yet done, see `docs/KNOWN-ISSUES.md`.
+These local patches are the `net-next` pre-v7 revision of a switch-driver series
+tracked upstream as draft PR `openwrt/openwrt#19644`, which this tree has already
+adopted (replacing an earlier, less complete v1 revision of eight patches). The
+pre-v7 revision adds family D LUT/L2 support and generalizes the SerDes indexing
+to cover family D's extension port layout. It has been tested by a third party on a
+TP-Link EX511 v2, a different device sharing the same chip ID/family, with a stable
+link, VLAN bridging, and clean reboot cycles reported. See `docs/CREDITS.md` for
+full authorship and `docs/KNOWN-ISSUES.md` §8 for what changed between revisions.
 
 ## Wi-Fi
 
@@ -153,7 +199,9 @@ These are marked inline in the DTS with comments, and tracked with more detail i
 - Physical LAN1–4 port-to-silicon label mapping, `KNOWN-ISSUES.md` §5
 - Exact MAC offset within `tp_data`, `KNOWN-ISSUES.md` §3
 - Exact calibration-variant string for the switch family, `KNOWN-ISSUES.md` §1
-- SGMII vs HSGMII uplink speed, see the dedicated section above and `KNOWN-ISSUES.md` §4
+- Whether the `777-07`/`777-08` family D driver path actually programs the SerDes
+  pause bits for the HSGMII 2.5G trunk, see the Uplink speed section above and
+  `KNOWN-ISSUES.md` §10
 
 None of these block a build. All of them block calling this port "working" on real
 hardware, see `archer-ax23-v2-port-status.md` for the current overall state.
