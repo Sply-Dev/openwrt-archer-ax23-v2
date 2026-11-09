@@ -19,6 +19,35 @@ Last reviewed: 2026-10-17.
 > audit of that date, per the Snapshot Note above. For the current state of the switch
 > driver patch set, see [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) §8 and §10.
 
+> **Post-snapshot update (2026-11-08):** two further corrections to this snapshot's own
+> content, neither reflected below (per the Snapshot Note, this document is not edited
+> retroactively):
+> - **Switch reset GPIO.** S5 and section 1.2 state the switch reset line as GPIO33. This
+>   has since been corrected to **GPIO39**, confirmed by direct read of the live device
+>   tree on a physical unit (`/proc/device-tree/soc/ess-instance/ess-switch1@1/reset_gpio`
+>   = `0x27` = 39). GPIO33 is LED-only (2.4GHz). The GPIO33 figure in this snapshot traced
+>   back to a third-party forum report, not an independent measurement, and did not match
+>   this device's own device tree once checked directly. See `HARDWARE.md`'s GPIO map and
+>   `KNOWN-ISSUES.md` §11.
+> - **CPU trunk link mode.** R4 describes SGMII vs HSGMII as an open, unresolved dispute
+>   between two OEM sources (U-Boot source vs. stock DTB) at the time of this snapshot.
+>   This has since been resolved in favor of **HSGMII 2.5G**: a direct physical clock
+>   measurement on real hardware (312.5MHz, only explainable by 2500Base-X) was obtained
+>   after this snapshot was written, and the apparent DTB/U-Boot contradiction R4 describes
+>   turned out not to be a real contradiction, once it's understood that `phy-mode =
+>   "sgmii"` names a pinout family on this device's kernel fork rather than a speed by
+>   itself. The current DTS uses `2500base-x` with `pause` on both fixed-link nodes. This
+>   is still unverified under the OpenWrt driver stack on physical hardware (no UART
+>   available to this project, see `KNOWN-ISSUES.md` §12) — only the OEM-side evidence and
+>   the physical clock measurement are resolved. See `KNOWN-ISSUES.md` §4 and
+>   `RESEARCH.md`'s "SGMII / CPU port bring-up" section for the full derivation,
+>   including why the SGMII reading this snapshot describes as matching the DTB was itself
+>   later found to be a misreading of vendor terminology, not a fact about this device's
+>   intended link speed.
+>
+> Both items are static-analysis / measurement corrections, not hardware validation of
+> Ethernet traffic over the link — that remains open, see `TESTING.md`.
+
 ## Scope and evidence conventions
 
 Baseline reviewed:
