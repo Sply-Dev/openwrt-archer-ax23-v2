@@ -40,6 +40,11 @@
  *     from a different physical unit (community member vram), not a
  *     direct reading of this device. GPIO33 is confirmed to be the
  *     2.4GHz LED, with no reset function
+ *   - LED polarity and full 7-LED map confirmed by live visual
+ *     inspection against sysfs brightness on stock hardware (root
+ *     shell): all 7 LEDs on this board are active-low -- brightness=1
+ *     (lit) corresponds to electrical level 0. GPIO33 (2.4GHz) added
+ *     as a gpio-leds node on this basis.
  */
 
 /dts-v1/;
@@ -93,36 +98,50 @@
 		led_power: led-power {
 			function = LED_FUNCTION_POWER;
 			color = <LED_COLOR_ID_WHITE>;
-			gpios = <&tlmm 10 GPIO_ACTIVE_HIGH>;
+			gpios = <&tlmm 10 GPIO_ACTIVE_LOW>;
 			default-state = "on";
 		};
 
 		led-wan-orange {
 			label = "amber:wan";
-			gpios = <&tlmm 12 GPIO_ACTIVE_HIGH>;
+			gpios = <&tlmm 12 GPIO_ACTIVE_LOW>;
 		};
 
 		led-wan {
 			label = "white:wan";
-			gpios = <&tlmm 13 GPIO_ACTIVE_HIGH>;
+			gpios = <&tlmm 13 GPIO_ACTIVE_LOW>;
 		};
 
 		led-wps {
 			function = LED_FUNCTION_WPS;
 			color = <LED_COLOR_ID_WHITE>;
-			gpios = <&tlmm 22 GPIO_ACTIVE_HIGH>;
+			gpios = <&tlmm 22 GPIO_ACTIVE_LOW>;
 		};
 
 		led-lan {
 			function = LED_FUNCTION_LAN;
 			color = <LED_COLOR_ID_WHITE>;
-			gpios = <&tlmm 32 GPIO_ACTIVE_HIGH>;
+			gpios = <&tlmm 32 GPIO_ACTIVE_LOW>;
 		};
 
 		led-wifi-5g {
 			label = "white:wlan5g";
-			gpios = <&tlmm 11 GPIO_ACTIVE_HIGH>;
+			gpios = <&tlmm 11 GPIO_ACTIVE_LOW>;
 			linux,default-trigger = "phy0tpt";
+		};
+
+		/*
+		 * phy1tpt is inferred, not boot-tested: &wifi (2.4GHz)
+		 * is registered before &wifi1 (5GHz) in this DTS, and
+		 * the 5GHz LED above already uses phy0tpt, so phy1 is
+		 * assumed to map to the 2.4GHz radio by registration
+		 * order. Confirm against actual phy0/phy1 enumeration
+		 * on first real boot with both radios up.
+		 */
+		led-wifi-2g {
+			label = "white:wlan2g";
+			gpios = <&tlmm 33 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "phy1tpt";
 		};
 	};
 };
@@ -464,7 +483,7 @@
 
 	led_pins: led-pins {
 		pins = "gpio10", "gpio11", "gpio12", "gpio13",
-		       "gpio22", "gpio32";
+		       "gpio22", "gpio32", "gpio33";
 		function = "gpio";
 		drive-strength = <8>;
 		bias-pull-down;
