@@ -93,7 +93,7 @@ Evidence previously cited for HSGMII 2.5G, and why it does not hold up:
 - The same function contains an HSGMII-specific signal fix
   (`rtl8367d_setAsicReg` sequence) that is commented out, with a note above it
   reading "According to rtk AE, these ops have been included in 1.4.2 driver"
-  — i.e. TP-Link's own firmware engineers disabled this HSGMII workaround as
+  i.e. TP-Link's own firmware engineers disabled this HSGMII workaround as
   obsolete.
 - Production DTS files for sibling boards on the same switch platform (AX53 v2,
   AX58 v2, from `kuncy7/openwrt-nss-edma`) use `2500base-x` at 50MHz. But those
@@ -126,7 +126,7 @@ devices on the `ipq50xx` subtarget face a steep bar for mainline inclusion. The
 practical path for this device is expected to be a community-maintained tree first,
 with mainline submission considered later and separately, if at all.
 
-## 7. GPL source completeness — `qca-ssdk` kernel module
+## 7. GPL source completeness: `qca-ssdk` kernel module
 
 `[VERIFIED]` Two versions of the vendor `qca-ssdk.ko` kernel module were extracted
 from official TP-Link firmware images for this device:
@@ -267,18 +267,18 @@ the same venue by the same people**, and it has already been merged.
 - **Series:** `net: dsa: realtek: rtl8365mb: add SGMII/HSGMII support for
   RTL8367S`, Johan Alvarado, 2 patches, `net-next` v1 through v6.
 - **Merged** into `netdev/net-next.git` on 2026-07-22 by Jakub Kicinski:
-  - `net: dsa: realtek: rtl8365mb: add SGMII support for RTL8367S` -
+  - `net: dsa: realtek: rtl8365mb: add SGMII support for RTL8367S`:
     `git.kernel.org/netdev/net-next/c/0b577e2fe06c`
-  - `net: dsa: realtek: rtl8365mb: add HSGMII support for RTL8367S` -
+  - `net: dsa: realtek: rtl8365mb: add HSGMII support for RTL8367S`:
     `git.kernel.org/netdev/net-next/c/987137345f33`
 - **`Reviewed-by`:** Maxime Chevallier, **Mieczyslaw Nalewaj** (the author of the
   pre-v7 series in §8), and **Luiz Angelo Daros de Luca**. `Tested-by:` Stanislaw Pal,
   on a TP-Link **Archer AX55 v1** (IPQ5018 + RTL8367S, HSGMII/2500base-x CPU
-  trunk) - the same SoC/switch combination as this device, though not this exact
+  trunk), the same SoC/switch combination as this device, though not this exact
   SKU or port configuration.
 - **Chip coverage:** confirmed family D. Luiz Angelo's review states explicitly
   that "the only model that could use (H)SGMII in a different interface is
-  RTL8370MB" - i.e. for RTL8367S/RTL8367SB (this device's chip), the series'
+  RTL8370MB", i.e. for RTL8367S/RTL8367SB (this device's chip), the series'
   assumptions about which port the SerDes is muxed to hold.
 - **Design, relevant to §10's pause gap:** models the SerDes as a real
   `phylink_pcs` (`mac_select_pcs`/`pcs_config`/`pcs_get_state`/`pcs_link_up`),
@@ -294,7 +294,7 @@ review thread gives a strong signal: Mieczyslaw Nalewaj, author of the pre-v7
 series this tree carries, reviewed and approved Alvarado's series rather than
 objecting to a competing implementation. The more likely reading is that
 #19644's SerDes/PCS portions will need to be rebased on top of the
-infrastructure this series introduces, not the other way around - but this is
+infrastructure this series introduces, not the other way around, but this is
 an inference from the review thread, not a statement from either author about
 plans, and should be treated as `[OPEN]` until #19644 itself is updated or
 commented on post-merge.
@@ -304,7 +304,7 @@ driver issue):** a long sub-thread documents a cold-boot trunk failure
 reported during review, tested on an Archer AX55 v1 (IPQ5018, same SoC family
 as this device). After extensive isolation (register dumps, selective resets,
 a controlled delay experiment), the cause was identified as **a failing power
-supply**, not the driver or this patch series - confirmed by an A/B/A swap
+supply**, not the driver or this patch series, confirmed by an A/B/A swap
 (old PSU → bad, new PSU → clean twice, old PSU again → bad again). Noted here
 only so that a similar symptom during this project's own hardware bring-up
 (`TESTING.md` H1-H4) is checked against PSU/power quality before being treated
@@ -324,7 +324,7 @@ as much as §8.1 might suggest.** Alvarado's series only replaces the SerDes/PCS
 bring-up (what `777-07`/`777-08` do). It does not touch chip detection
 (`777-01`, `777-02`, `777-10`), family D speed setting (`777-03`), RGMII mode
 for family D (`777-04`), VLAN 4k (`777-05`), raw-VID PVID (`777-06`), or L2/LUT
-access (`777-09`) - none of this is in scope for, or mentioned anywhere in, the
+access (`777-09`); none of this is in scope for, or mentioned anywhere in, the
 Alvarado thread. Adopting Alvarado's series is therefore not a drop-in
 replacement for this tree's `777-0x` patch set; it would mean keeping the
 family D-specific patches for everything except SerDes/PCS, and rebasing
@@ -333,14 +333,14 @@ introduces.
 
 **PR #19644's own checklist says this directly.** The PR description lists:
 
-- ~~fix mode mask calculation~~ - already implemented
-- ~~add VLAN and Bridging support to Realtek rtl8365mb DSA switch~~ - already implemented
-- ~~add SGMII and HSGMII mode support~~ - already implemented
-- ~~add support for rtl8367sb~~ - already implemented
-- **add support for rtl8367s-vb** - not checked off
+- ~~fix mode mask calculation~~: already implemented
+- ~~add VLAN and Bridging support to Realtek rtl8365mb DSA switch~~: already implemented
+- ~~add SGMII and HSGMII mode support~~: already implemented
+- ~~add support for rtl8367sb~~: already implemented
+- **add support for rtl8367s-vb**: not checked off
 
 The third and fourth items are exactly what §8.1 and the `0x6367`/RTL8367SB
-patch found there cover - both are chip-ID `0x6367` (family C), already
+patch found there cover; both are chip-ID `0x6367` (family C), already
 upstream. The remaining, unchecked item, "rtl8367s-vb", is this device's own
 chip (`0x6642`, family D, confirmed in §1). PR #19644's maintainer is tracking
 the same gap this document identifies, in the same terms.
@@ -356,14 +356,14 @@ active, ongoing split:
   renamed/renumbered from the `778`/`797` lineage this tree already tracks in
   §8).
 - Once #25153 lands, `931`/this PR is expected to shrink to just the family D
-  early-return in `rtl8365mb_sds_defer_needed()` - i.e. exactly the gate this
+  early-return in `rtl8365mb_sds_defer_needed()`, i.e. exactly the gate this
   tree's own §8 already confirmed is unchanged and correct for family D.
-- `930-07`/`930-08` (the family D SerDes/PCS patches - this tree's `777-07`/
+- `930-07`/`930-08` (the family D SerDes/PCS patches, this tree's `777-07`/
   `777-08` lineage) are explicitly flagged by Nalewaj as needing a rebase onto
   `797`/the new `phylink_pcs` infrastructure once the split above lands.
 - Nalewaj has stated he has no RTL8367S-VB hardware and is developing "blind";
   he is explicitly looking for someone to submit the non-`931` commits
-  upstream and to test RGMII mode on real RTL8367S-VB hardware - a possible
+  upstream and to test RGMII mode on real RTL8367S-VB hardware, a possible
   opening for this project once physical hardware access exists (`TESTING.md`
   H0).
 
@@ -371,12 +371,12 @@ active, ongoing split:
 fault):** a different cold-boot trunk failure than the one in §8.1 is
 documented by `kuncy7` on the same sibling board (Archer AX55 v1, IPQ5018).
 Symptom: the SerDes reports link up, but every frame sent by the CPU arrives
-at the switch's CPU port with a bad FCS and is dropped - diagnosable via
+at the switch's CPU port with a bad FCS and is dropped, diagnosable via
 `ethtool -S eth0 | grep p06`: a climbing `dot3StatsFCSErrors` counter with
 `ifInUcastPkts` stuck at 0 on a bad boot, both flat/moving normally on a good
 one. `kuncy7` states explicitly this is unrelated to the family D patches.
 This is a different signature from §8.1's PSU-related failure (which showed
-drop events with zero FCS errors) - noted here as a second, distinct
+drop events with zero FCS errors), noted here as a second, distinct
 diagnostic to check against during this project's own hardware bring-up
 (`TESTING.md` H1-H4) before attributing a dead trunk to a driver bug.
 
@@ -479,7 +479,7 @@ in this tree, see `TESTING.md` H10.
 
 ## 10. `pause` on the GMAC1/CPU-port fixed-link
 
-**Status:** `[VERIFIED]` by source inspection across three sources — the
+**Status:** `[VERIFIED]` by source inspection across three sources, the
 mainline driver, this tree's `777-07`/`777-08` (v7), and their call sites.
 **Not yet confirmed on physical hardware.**
 
@@ -501,7 +501,7 @@ Third-party reports (AX5x boards, forum) measured ~13% UDP loss without it.
 
 Read directly from the mainline driver
 (`drivers/net/dsa/realtek/rtl8365mb_main.c`, upstream `torvalds/linux`, no
-family D patches applied — this function predates the entire `777-0x`
+family D patches applied; this function predates the entire `777-0x`
 series).
 
 `rtl8365mb_phylink_mac_link_up()` calls, unconditionally for any RGMII or
@@ -515,13 +515,13 @@ ret = rtl8365mb_ext_config_forcemode(priv, port, true, speed,
 `rtl8365mb_ext_config_forcemode()` itself (mainline, lines ~1624–1697) writes
 the resolved `tx_pause`/`rx_pause` straight into the
 `RTL8365MB_DIGITAL_INTERFACE_FORCE_REG` pause bits, with **no family branch
-of any kind** — this is generic forced-mode configuration that exists for
+of any kind**, this is generic forced-mode configuration that exists for
 every chip this driver supports, including before family D was ever added.
 
 ### What the family D patches (`777-07`/`777-08`, v7) actually change
 
 Neither patch touches `rtl8365mb_ext_config_forcemode()` or its call sites in
-`mac_link_up()`/`mac_link_down()` — confirmed by:
+`mac_link_up()`/`mac_link_down()`, confirmed by:
 
 ```bash
 grep -rn "ext_config_forcemode" target/linux/generic/pending-6.18/777-*.patch
@@ -549,7 +549,7 @@ with the comment:
 > forced-mode register by `rtl8365mb_ext_config_forcemode()`."*
 
 That comment is accurate and verifiable against the mainline function above
-— it is not describing a missing feature, it is documenting that family D
+it is not describing a missing feature; it is documenting that family D
 doesn't need the family-C-specific second path because the generic one
 already covers it.
 
@@ -573,7 +573,7 @@ This is static analysis, not a hardware result. Nothing here confirms:
 This requires a physical unit and UART access to verify (`TESTING.md`,
 blocked on UART per project status). Until then, `pause;` should be read as
 **"implemented in the driver path this tree carries, unverified on
-hardware"** — not "unimplemented."
+hardware"**, not "unimplemented."
 
 ### Revision note
 
@@ -589,7 +589,7 @@ then confirmed against mainline.
 
 An earlier draft of this correction, based on PR #25101's `v6` revision
 (hash `a1eb1a7a988b8deefb8828f498b98af5c5fc9bbd` for `777-07`), was caught as
-the wrong revision before being written here — v6 and v7 are functionally
+the wrong revision before being written here; v6 and v7 are functionally
 identical for this specific finding. The only v6→v7 diff is unrelated: a
 `cpu_dp->index` filter added to `rtl8365mb_conduit_state_change()` in
 `777-08`, plus a `Reviewed-by` tag. The hash mismatch is noted so a future
