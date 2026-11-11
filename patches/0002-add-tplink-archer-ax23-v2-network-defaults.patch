@@ -1,0 +1,22 @@
+From: AX23 v2 port maintainers
+Subject: [PATCH] qualcommax: ipq50xx: add Archer AX23 v2 network defaults
+
+Add the DSA LAN and WAN interface roles for the Archer AX23 v2. The DTS
+labels the four LAN switch ports lan1 through lan4 and the WAN port wan.
+
+---
+ target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network b/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network
+--- a/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network
++++ b/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network
+@@ -10,6 +10,7 @@ ipq50xx_setup_interfaces()
+	elecom,wrc-x3000gs2|\
+	elecom,wrc-x3000gst2|\
+	iodata,wn-dax3000gr|\
+	linksys,mr5500|\
++	tplink,archer-ax23-v2|\
+	tplink,archer-ax55-v1|\
+	zyxel,scr50axe)
+		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "wan"

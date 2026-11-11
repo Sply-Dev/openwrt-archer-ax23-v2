@@ -61,6 +61,16 @@ The patches must be applied to the matching upstream source revision specified i
 patch -p1 < /path/to/ax23v2-public/patches/0001-add-tplink-archer-ax23-v2-caldata.patch
 ```
 
+### Add the default LAN/WAN mapping
+
+The AX23 v2 exposes DSA ports named lan1, lan2, lan3, lan4, and wan. Add the
+matching board case to ipq50xx board defaults:
+
+    patch -p1 < /path/to/ax23v2-public/patches/0002-add-tplink-archer-ax23-v2-network-defaults.patch
+
+This groups lan1-lan4 as LAN and wan as WAN. It does not assign interface MAC
+addresses; the AX23 v2 MAC source and offsets remain unresolved.
+
 ### Add the device definition
 
 The device definition block is provided in:

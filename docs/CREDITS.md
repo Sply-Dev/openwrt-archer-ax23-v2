@@ -8,6 +8,7 @@ authors, so that credit lands where it belongs.
 - `target/linux/qualcommax/dts/ipq5018-archer-ax23-v2.dts` - device tree
 - `target/linux/qualcommax/image/ipq50xx-ax23v2-snippet.mk` - image definition
 - `patches/0001-add-tplink-archer-ax23-v2-caldata.patch` - ath11k caldata hotplug cases for this device
+- `patches/0002-add-tplink-archer-ax23-v2-network-defaults.patch` - AX23 v2 LAN/WAN interface roles
 - All of `docs/` - written for this repository, except where it describes or
   quotes someone else's work (credited inline and here)
 

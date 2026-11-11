@@ -43,7 +43,7 @@ The AX23 v2 shares its SoC (IPQ5018), NAND layout style and QCN6122-class 5GHz r
 | `docs/archer-ax23-v2-port-status.md` | Point-in-time status snapshot with evidence tags |
 | `docs/CREDITS.md` | Who wrote what - this project's own work vs. carried-in third-party patches |
 | `target/` | DTS, image definition snippet, and carried-in switch driver patches for this device |
-| `patches/` | Locally maintained patches versioned in this repository and applied manually during the build, e.g. the caldata hotplug change |
+| `patches/` | Locally maintained patches applied manually during the build, including ath11k caldata and AX23 v2 LAN/WAN defaults |
 
 ## What is and isn't here
 
@@ -70,6 +70,7 @@ vendor-supplied kernel module.
 |---|---|
 | Boot (initramfs/sysupgrade build) | Builds successfully; not booted on hardware. A/B boot is selected via `fw_setenv tp_boot_idx` (from vendor GPL); the sysupgrade logic for this is not implemented or tested yet |
 | Ethernet switch (RTL8367 family D) | Chip ID 0x6642 confirmed via static analysis; not yet read from the physical unit. Driver patches updated to the net-next family D series pre-v7 (PR #19644). Trunk mode is HSGMII 2.5G, matching the stock running configuration's forced speed and a live clock measurement on stock hardware (312.5 MHz, consistent with 2500Base-X and not with SGMII 1G). This differs from the stock DTB's static `phy-mode`, which uses legacy terminology that does not by itself indicate link speed - see the note above `&gmac1` in the device tree for the full reasoning. Link to CPU port not validated with the OpenWrt kernel/driver on hardware |
+| Default network roles | AX23 v2 maps lan1-lan4 as LAN and wan as WAN. No board-specific LAN/WAN MAC assignment is included. |
 | 2.4GHz radio (IPQ5018 internal) | Caldata hotplug hook written; board data / ART offsets unvalidated; not tested |
 | 5GHz radio (QCN6102) | Caldata hotplug hook written; board data / ART offsets unvalidated; not tested |
 | LEDs / buttons | GPIO map known from OEM DTB and live device tree readout on real hardware; polarity not confirmed |
