@@ -40,77 +40,52 @@ commercial name (RTL8367SC, printed on this device by TP-Link) does not by itsel
 determine family, driver probe output does. The dual static-analysis result above
 is that evidence, independent of the commercial part name.
 
-**Still open:** none of this has been confirmed by reading the chip ID register on a
-physical unit, or by observing the driver's own probe message (`"found an RTL8367S-VB
-switch"` vs `"found an RTL8367S switch"`) in a real boot log. No conclusion about
-functional hardware compatibility (as opposed to chip identification) should be drawn
-until that happens, see §4 below and `TESTING.md` test H3.
+**Hardware update (v0.2):** the OpenWrt driver reported an RTL8367S-VB switch and registered DSA ports. The supplied log does not show a numeric
+chip-ID register read. Driver identification and port registration do not
+establish reliable traffic through the external ports; see §4.
 
 ## 2. ath11k / Q6 calibration and board data
 
-`[OPEN]` Calibration data paths for both radios (IPQ5018 internal 2.4GHz, QCN6102
-5GHz over PCIe) have been wired into the device tree and hotplug scripts based on
-vendor board-data file locations `[SOURCE]`. Neither radio has been tested on
-hardware. The QCN6122 firmware package built into test images showed only `m3_fw`
-with no `board-2.bin`/`firmware-2.bin`; the implication of this is still open.
+`[OPEN]` Wi-Fi compatibility was deliberately outside the v0.2 test scope;
+board-data and full radio support were not configured for these tests. The
+v0.2 kernel log shows ath11k probing the IPQ5018 and QCN6122 radios but failing
+to fetch board data (including `failed to fetch board.bin` and a QMI board-file error of `-12`). The logs do not establish the cause of that failure or prove that
+either radio is incompatible. ART offsets, calibration, association and traffic
+remain unvalidated.
 
 ## 3. MAC address origin
 
-`[OPEN]` The `tp_data` NAND partition is the leading candidate for the LAN/WAN MAC
-address source (pattern seen in comparable devices using the same vendor SDK), but
-the exact offset within that partition has not been confirmed on this device. Requires
-a UART dump to resolve. Separately, no `02_network` case exists yet to actually
-assign the extracted MAC(s) to the LAN/WAN interfaces, see §4's related gap on
-install/boot integration.
+`[OPEN]` The `tp_data` NAND partition is the leading candidate for the
+LAN/WAN MAC address source, but the exact offset has not been confirmed on
+this device. Patch `0002` adds the `02_network` LAN/WAN roles, without
+board-specific MAC assignment. The v0.2 logs predate that patch.
 
 ## 4. Trunk link speed / SGMII vs HSGMII
 
-`[VERIFIED by GPL source inspection, not hardware]`. MDIO-level detection of the
-switch does not by itself demonstrate working Ethernet traffic over the GMAC1 to
-switch CPU port link, so this is not a claim that Ethernet works. But the link
-mode question itself is resolved: this port's DTS uses SGMII, fixed 1000Mbps.
+The project's DTS configures the GMAC1 to switch CPU-port trunk as HSGMII
+2.5G (`2500base-x`, fixed-link speed 2500) with `pause` on both fixed-link
+nodes. The v0.2 OpenWrt kernel log reports the switch and GMAC links up at
+2.5 Gbit/s, full duplex, with RX/TX flow control reported. That is a
+hardware boot result for the CPU link, not evidence that all external ports
+forward traffic reliably or that pause frames were exchanged.
 
-This device has five 1G physical ports (WAN + LAN1-4); there is no port on this
-SKU that exceeds 1G, so a 2.5G trunk would carry no traffic beyond what SGMII 1G
-already provides.
+Evidence from the OEM configuration is recorded separately:
 
-Evidence for SGMII 1G:
+- The U-Boot source configures `MODE_EXT_HSGMII` and `PORT_SPEED_2500M` and
+  prints `Set RTL8367S SGMII 2.5Gbps`.
+- On running stock hardware, UNIPHY/GMAC TX and RX clocks were measured at
+  312.5 MHz, consistent with 2500Base-X rather than a 1 Gbit/s link.
+- The OEM DTB contains `phy-mode = "sgmii"` on the GMAC side. The
+  switch's `port@1` has `forced-speed = <0x9c4>` (2500) and
+  `forced-duplex = <1>`. The `phy-mode` string alone does not establish
+  a 1 Gbit/s operating speed.
 
-- This matches the OEM device tree blob extracted from this unit's own stock
-  firmware (`phy-mode sgmii`, `fixed-link speed 1000`). The DTB is what the
-  kernel actually uses at runtime, as opposed to U-Boot's early bring-up.
-
-Evidence previously cited for HSGMII 2.5G, and why it does not hold up:
-
-- The OEM U-Boot source (`ipq5018_gmac.c`, `rtl8367_sw_init()`) does configure
-  `MODE_EXT_HSGMII` / `PORT_SPEED_2500M`, forced, on `EXT_PORT0` and
-  `EXT_PORT1`. But this routine runs unconditionally for any board built with
-  `CONFIG_TP_EXT_SWITCH_RTL8367_ALL` and an RTL8367 switch present, gated only
-  on switch presence, not board ID or port capability. It also configures two
-  extension ports, not this device's single CPU trunk port. This matches
-  generic Qualcomm/Realtek SDK bring-up code, not a deliberate per-board
-  choice.
-- The same function contains an HSGMII-specific signal fix
-  (`rtl8367d_setAsicReg` sequence) that is commented out, with a note above it
-  reading "According to rtk AE, these ops have been included in 1.4.2 driver"
-  i.e. TP-Link's own firmware engineers disabled this HSGMII workaround as
-  obsolete.
-- Production DTS files for sibling boards on the same switch platform (AX53 v2,
-  AX58 v2, from `kuncy7/openwrt-nss-edma`) use `2500base-x` at 50MHz. But those
-  boards have 2.5G physical ports, unlike this device's 1G ports; their trunk
-  speed is explained by their own port hardware, not by anything specific to
-  this device.
-
-See 10 for a related finding: the `pause` property previously set on both
-`fixed-link` nodes has been removed, since its only stated justification (a
-2.5G CPU trunk unable to backpressure against 1G physical ports) does not
-apply once the trunk itself is SGMII 1G.
-
-Still UNVERIFIED on physical AX23 v2 hardware (no UART yet). This needs to be
-tested (`TESTING.md` H3/H4) before any claim of "Ethernet works" is made. If
-the trunk does not come up in SGMII 1G, HSGMII 2.5G + a 50MHz UNIPHY reference
-(with `pause` restored) is the fallback to try. See `docs/DEVICE-TREE.md`'s
-dedicated section and `docs/RESEARCH.md`'s SGMII/CPU port bring-up section.
+The different naming used by the OEM DTB and the speed-related OEM properties
+must be read together. The stock clock measurement supports the HSGMII 2.5G
+interpretation; the OpenWrt v0.2 log independently reports a 2.5 Gbit/s
+CPU link. Effective flow control, per-port carrier stability, packet
+forwarding, VLAN operation and throughput remain to be tested. See
+`DEVICE-TREE.md`, `RESEARCH.md` and `TESTING.md`.
 
 ## 5. LED polarity and physical port mapping
 
@@ -206,14 +181,14 @@ build timestamp. This is useful context for anyone comparing behavior across fir
 versions: the switch-relevant code path has been stable across at least these two
 releases.
 
-## 8. Switch driver patch set updated to upstream pre-v7 (PR #19644)
+## 8. Switch driver patch set used in this project (PR #19644)
 
 `[VERIFIED]`. The eight `777-0x` patches previously carried in this tree
-(an early v1 revision) have been replaced with the pre-v7 revision of
-Mieczyslaw Nalewaj's (`namiltd`) switch driver series, from the
-`namiltd/openwrt` branch `Realtek_DSA` (net-next pre-v7, `Reviewed-by:`
-Linus Walleij and Luiz Angelo Daros de Luca). This tree now carries 10
-patches, `777-01` through `777-10`.
+(an early v1 revision) were replaced by Mieczyslaw Nalewaj's 10-patch
+series, `777-01` through `777-10`. The patch files currently carry v7
+headers. For this project's build and test history, pre-v7 and v7
+refer to the same series; they are not two separately validated
+implementations. v9 and v10 have not been incorporated or tested here.
 
 What changed from v1:
 
@@ -240,7 +215,7 @@ Verified before merging into this tree, in an isolated build container:
   (upstream `797`, formerly `778`) is unchanged in pre-v7:
   `rtl8365mb_sds_defer_needed()` still returns `false` for
   `RTL8365MB_FAMILY_D`, confirming that patch remains correctly not
-  applicable to this device. See §10's "Next step" resolution below.
+  applicable to this device. See §10 for the pause-path analysis.
 
 Third-party hardware validation for the upstream series (not this
 specific device, but the same chip ID and family) remains the
@@ -249,11 +224,12 @@ family D): successful switch detection, a stable 1Gbps SGMII CPU link
 up in 4.6s, 0 FCS/CRC/drop errors, working VLAN-aware bridging, 20
 rounds of VLAN churn without loss, two clean reboot cycles.
 
-**Still open:** this confirms the patch set builds, not that it works
-on physical AX23 v2 hardware. No UART-based or boot-based functional
-test has been run on this device with the pre-v7 patches. The PR itself
-is still in draft upstream, requires 6 reviewer approvals to merge,
-and had 1 failing check as of this writing.
+**AX23 v2 validation:** the v0.2 initramfs booted on physical hardware;
+the OpenWrt driver reported RTL8367S-VB detection and a 2.5 Gbit/s CPU
+link. This does not establish reliable external-port forwarding, VLAN
+behavior or v0.3 results. The exact source and patch revision of the
+v0.2 image should accompany any attribution of a runtime result to a
+particular patch.
 
 ## 8.1. A separate, already-merged series covers the same SerDes path (Johan Alvarado, net-next)
 
@@ -380,7 +356,7 @@ drop events with zero FCS errors), noted here as a second, distinct
 diagnostic to check against during this project's own hardware bring-up
 (`TESTING.md` H1-H4) before attributing a dead trunk to a driver bug.
 
-**Bottom line for this project's open decision (§8.1):** adopting Alvarado's
+**Project implication for the open decision (§8.1):** adopting Alvarado's
 SerDes/PCS model is not an immediate drop-in swap for `777-07`/`777-08` today,
 but it is the direction upstream is already moving, with the exact rebase this
 project would need already being discussed by the patch authors themselves.
@@ -398,7 +374,7 @@ gap as seen from PR #19644's own checklist and comment thread (`930-07`/
 infrastructure, as of that thread). This section is a direct source
 comparison, done independently of that thread, between Alvarado's merged
 series and the `777-07`/`777-08` patches this tree actually carries (pre-v7,
-hashes in §10's revision table).
+the patch headers discussed in §10).
 
 **Scope of this comparison:** Alvarado's series has two patches (SGMII base,
 then HSGMII). Both have now been read and compared in full. The second
@@ -409,9 +385,10 @@ switches `MAC8_SEL_SGMII_MASK` for `MAC8_SEL_HSGMII_MASK` in the same
 `rtl8365mb_interface_is_serdes()` to also accept
 `PHY_INTERFACE_MODE_2500BASEX`, and treats `SPEED_2500` the same as
 `SPEED_1000` in the force-mode speed field (that register has no 2.5G value;
-the actual rate comes from the SerDes's own HSGMII configuration). This
-device uses SGMII 1G, not HSGMII (§4), so the second patch does not apply to
-this device in practice, but it does not change the conclusion below either.
+the actual rate comes from the SerDes's own HSGMII configuration).
+The AX23 v2 is configured and was tested with an HSGMII 2.5G CPU link (§4),
+so the HSGMII portion is relevant. This source comparison is not a functional
+validation of external-port traffic.
 
 **Finding:** the structure is the same core model, not a divergent
 implementation that still needs porting:
@@ -481,15 +458,13 @@ in this tree, see `TESTING.md` H10.
 
 **Status:** `[VERIFIED]` by source inspection across three sources, the
 mainline driver, this tree's `777-07`/`777-08` (v7), and their call sites.
-**Not yet confirmed on physical hardware.**
+**The v0.2 log reports RX/TX flow control on the 2.5 Gbit/s CPU link, but actual pause-frame exchange has not been measured.**
 
-> **Correction (2026-11-01):** this section previously concluded pause is
-> inert for family D. That conclusion was based on an earlier (pre-v7)
-> revision of the `777-0x` patches no longer carried in this tree.
-> Re-reading the v7 patches currently in `target/linux/generic/pending-6.18/`
-> shows the opposite: pause for family D goes through a pre-existing,
-> family-agnostic code path that both v1 and the earlier reading of this
-> section missed.
+> **Correction (2026-11-01):** an earlier analysis concluded that pause was
+> inert for family D. Inspection of the pre-v7/v7 series carried here found
+> a pre-existing, family-agnostic forced-mode path. The previous analysis
+> overlooked that path; no functional difference between pre-v7 and v7
+> explains the correction.
 
 ### Background
 
@@ -497,7 +472,7 @@ The device tree sets `pause;` on the `fixed-link` nodes of both `&gmac1` and
 `port@6` (CPU port), intending to enable flow control on the trunk.
 Third-party reports (AX5x boards, forum) measured ~13% UDP loss without it.
 
-### How pause actually reaches the wire
+### Driver path for pause
 
 Read directly from the mainline driver
 (`drivers/net/dsa/realtek/rtl8365mb_main.c`, upstream `torvalds/linux`, no
@@ -553,7 +528,7 @@ it is not describing a missing feature; it is documenting that family D
 doesn't need the family-C-specific second path because the generic one
 already covers it.
 
-### Practical implication, revised
+### Practical implication
 
 The `pause;` property in the DTS is **not** inert by driver design. The code
 path that honors it (`ext_config_forcemode()`, called from
@@ -564,34 +539,15 @@ as earlier revisions of this section claimed.
 
 ### Still `[OPEN]`
 
-This is static analysis, not a hardware result. Nothing here confirms:
-
-- that the far-end link partner honors the pause frames this device would emit,
-- that the register write has the intended effect in practice on this specific chip revision,
-- or that there isn't some runtime interaction (timing, SerDes re-latch state from `777-08`, etc.) that prevents the forced pause bits from taking effect on a real family D part.
-
-This requires a physical unit and UART access to verify (`TESTING.md`,
-blocked on UART per project status). Until then, `pause;` should be read as
-**"implemented in the driver path this tree carries, unverified on
-hardware"**, not "unimplemented."
+The v0.2 log reports RX/TX flow control on the 2.5 Gbit/s CPU link. It
+does not show actual pause frames, whether the link partner honors them,
+or sustained traffic behavior on this chip. The driver path supports the
+`pause;` property by source inspection; its on-wire effect remains unverified.
 
 ### Revision note
 
-This correction was found by comparing the pre-v7 patch text this section
-originally cited against the v7 patches actually present in this tree:
-
-| Patch | Hash | Label |
-|---|---|---|
-| `777-07` | `9af9ff10b3f4b49f1a17859022e8cb1ff25f8ae8` | `[PATCH net-next v7 07/10]` |
-| `777-08` | `6d6d9120b8851faa3e33bd48d59340881a75c985` | `[PATCH net-next v7 08/10]` |
-
-then confirmed against mainline.
-
-An earlier draft of this correction, based on PR #25101's `v6` revision
-(hash `a1eb1a7a988b8deefb8828f498b98af5c5fc9bbd` for `777-07`), was caught as
-the wrong revision before being written here; v6 and v7 are functionally
-identical for this specific finding. The only v6→v7 diff is unrelated: a
-`cpu_dp->index` filter added to `rtl8365mb_conduit_state_change()` in
-`777-08`, plus a `Reviewed-by` tag. The hash mismatch is noted so a future
-check against a v8+ revision knows exactly which commit this correction was
-verified against.
+The inspected `777-07` and `777-08` files carry `[PATCH net-next v7]`
+headers. The project also referred to this series as pre-v7 in earlier
+documentation. These labels do not denote distinct project builds or
+a change in the family D pause path. Neither v9 nor v10 has been
+incorporated or tested in this project.

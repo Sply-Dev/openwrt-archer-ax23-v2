@@ -7,26 +7,30 @@ This repository tracks an in-progress OpenWrt port for the **TP-Link Archer AX23
 (hardware version `v2.0`, Qualcomm IPQ5018 / 256MB RAM - not to be confused with the
 AX23 v1, which is MediaTek MT7621-based and already officially supported by OpenWrt).
 
-> **Status: no functional boot on physical hardware has been demonstrated yet.**
-> Everything in this repository is either a build result, a static analysis of vendor
-> firmware, or an unvalidated hypothesis clearly marked as such. See
-> [`docs/archer-ax23-v2-port-status.md`](docs/archer-ax23-v2-port-status.md) for the
-> current, evidence-tagged state of the port.
-
-> **Do not flash any image from this tree to a physical device.** `sysupgrade`
-> support is not implemented yet (see [`docs/KNOWN-ISSUES.md`](docs/KNOWN-ISSUES.md) and
-> [`docs/TESTING.md`](docs/TESTING.md)) and attempting it can brick the router. The build
-> artifacts here are intended only for proposed non-persistent testing (e.g.
-> RAM boot via UART/TFTP) once U-Boot console and network capabilities are verified
-> on physical hardware. Neither interactive U-Boot console access nor network image
-> loading has been demonstrated on this device yet - see [`docs/TESTING.md`](docs/TESTING.md).
+> **Status (2026-11-11):** The v0.2 initramfs booted from RAM on a physical AX23 v2
+> through U-Boot/TFTP and reached an OpenWrt shell. The v0.3 test image has been
+> built, but no v0.3 hardware result is documented here. See
+> [`docs/TESTING.md`](docs/TESTING.md) for observations and remaining tests.
+>
+> Persistent installation and `sysupgrade` are not validated. A/B handling for this
+> board is not implemented. The v0.2 RAM boot does not establish a safe flash path.
 
 ## Why this exists
 
-The AX23 v2 shares its SoC (IPQ5018), NAND layout style and QCN6122-class 5GHz radio with the TP-Link Archer AX55 v1, which has official OpenWrt support (snapshot, ipq50xx) for units with the standard RTL8367S switch. The AX23 v2 differs in two ways: it has 256 MB of RAM (the AX55 v1 has 512 MB), and its switch is a Realtek RTL8367 family D chip (chip ID 0x6642, confirmed via static analysis of the stock `qca-ssdk.ko` driver's chip detection sequence, matching the register sequence and chip ID/version values used by the upstream `rtl8365mb` driver) — the family the AX55 v1 page originally listed as unsupported. Support for this family comes from the net-next series carried in this tree (based on OpenWrt PR #19644, pre-v7 revision), tested in the wild on another family D device with the same chip ID (TP-Link EX511 v2) with a stable SGMII link, VLAN bridging, and clean reboot cycles. This repo documents the AX23 v2 port itself so it can be picked up, reviewed, and eventually tested by anyone with the hardware and a UART connection - including upstream OpenWrt maintainers.
+The AX23 v2 uses a Qualcomm IPQ5018, 256 MB of RAM and a QCN6122-class
+5 GHz radio. The related AX55 v1 has 512 MB of RAM and an RTL8367S
+switch. Static analysis of the AX23 v2 OEM `qca-ssdk.ko` detection
+routine and the upstream `rtl8365mb` register definitions identifies
+its switch as the RTL8367S-VB family D device, chip ID `0x6642`.
+
+This tree carries the project's pre-v7/v7 ten-patch series based on
+OpenWrt PR #19644. A third party reported a stable SGMII link, VLAN
+bridging and clean reboots on an EX511 v2 with the same switch ID.
+The AX23 v2 has separate v0.2 hardware results described below;
+the EX511 v2 report does not validate this board.
 
 <div align="center">
-  <img src="docs/img/hardware-topology.svg" alt="Hardware topology: IPQ5018 SoC connected via SGMII to the RTL8367SC switch, which exposes 5 Ethernet ports; both radios hang off the SoC; NAND below">
+  <img src="docs/img/hardware-topology.svg" alt="Hardware topology: IPQ5018 SoC connected via HSGMII 2.5G to the RTL8367SC switch, which exposes 5 Ethernet ports; both radios connect to the SoC; NAND below">
 </div>
 
 ## Repository layout
@@ -68,13 +72,18 @@ vendor-supplied kernel module.
 
 | Component | Status |
 |---|---|
-| Boot (initramfs/sysupgrade build) | Builds successfully; not booted on hardware. A/B boot is selected via `fw_setenv tp_boot_idx` (from vendor GPL); the sysupgrade logic for this is not implemented or tested yet |
-| Ethernet switch (RTL8367 family D) | Chip ID 0x6642 confirmed via static analysis; not yet read from the physical unit. Driver patches updated to the net-next family D series pre-v7 (PR #19644). Trunk mode is HSGMII 2.5G, matching the stock running configuration's forced speed and a live clock measurement on stock hardware (312.5 MHz, consistent with 2500Base-X and not with SGMII 1G). This differs from the stock DTB's static `phy-mode`, which uses legacy terminology that does not by itself indicate link speed - see the note above `&gmac1` in the device tree for the full reasoning. Link to CPU port not validated with the OpenWrt kernel/driver on hardware |
-| Default network roles | AX23 v2 maps lan1-lan4 as LAN and wan as WAN. No board-specific LAN/WAN MAC assignment is included. |
-| 2.4GHz radio (IPQ5018 internal) | Caldata hotplug hook written; board data / ART offsets unvalidated; not tested |
-| 5GHz radio (QCN6102) | Caldata hotplug hook written; board data / ART offsets unvalidated; not tested |
-| LEDs / buttons | GPIO map known from OEM DTB and live device tree readout on real hardware; polarity not confirmed |
-| MAC address assignment | Candidate NVMEM source identified; exact offset not confirmed |
+| Boot | v0.2 booted via U-Boot/TFTP to an OpenWrt shell on 2026-11-10. v0.3 test image built; hardware result pending. Persistent installation and `sysupgrade` remain unvalidated |
+| Ethernet switch (RTL8367 family D) | v0.2 logs report RTL8367S-VB detection, DSA ports `wan` and `lan1`-`lan4`, and a 2.5 Gbit/s full-duplex CPU link with RX/TX flow control reported. After administrative activation, `lan1` reported carrier 1 once; forwarding and reliable operation of all external ports remain unverified |
+| Default network roles | Patch `0002` adds the AX23 v2 board case for `lan1`-`lan4` as LAN and `wan` as WAN. It was added after the v0.2 tests and is not validated by those logs. Board-specific LAN/WAN MAC assignment remains unresolved |
+| 2.4 GHz and 5 GHz Wi-Fi | Deliberately outside the v0.2 test scope. Board-data loading failed in the v0.2 logs; this does not establish the cause or compatibility status. Radio operation is unvalidated |
+| LEDs / buttons | Switch reset GPIO39 and 2.4 GHz LED GPIO33 were identified from the live OEM device tree; functional OpenWrt validation remains open |
+| MAC address assignment | Candidate NVMEM source identified; exact offset and runtime assignment remain unconfirmed |
+
+The OEM running configuration uses a forced speed of 2500, and a 312.5 MHz
+UNIPHY/GMAC clock was measured on stock hardware. Its DTB also contains
+`phy-mode = "sgmii"`. The v0.2 OpenWrt log reports the CPU link up at 2.5 Gbit/s;
+neither the OEM clock nor the log alone proves external-port traffic or actual
+pause-frame exchange. See [`docs/DEVICE-TREE.md`](docs/DEVICE-TREE.md).
 
 ## Related upstream discussion
 

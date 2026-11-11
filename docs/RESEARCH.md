@@ -1,7 +1,7 @@
 # Research notes: vendor firmware and `qca-ssdk.ko` analysis
 
 This document summarizes the reverse-engineering work that informed this port's
-switch driver patches (`target/linux/generic/pending-6.18/777-01`–`777-08`) and
+switch driver patches (`target/linux/generic/pending-6.18/777-01` through `777-10`) and
 device tree (`ipq5018-archer-ax23-v2.dts`). Evidence tags are the same as elsewhere
 in this repository:
 
@@ -156,73 +156,58 @@ driver is needed.
 
 ## Switch reset sequence
 
-`[VERIFIED]` Hardware reset of the switch is driven by GPIO 33 (matching the
-GPIO map in `HARDWARE.md`, which already listed GPIO33 as shared between the
-2.4GHz LED and switch reset), using the `gpiod_direction_output_raw` /
-`gpiod_set_raw_value` kernel GPIO descriptor API, not raw register writes. The
-sequence:
+`[SOURCE]` The vendor driver uses the `gpiod_direction_output_raw` /
+`gpiod_set_raw_value` descriptor API for the switch reset. The observed
+sequence is consistent with active-low reset:
 
-| Step | Action | Delay after |
+| Step | Reset-line level | Delay |
 |---|---|---|
-| 1 | Set GPIO33 HIGH (idle/inactive) | 500 ms |
-| 2 | Set GPIO33 LOW (assert reset) | 200 ms |
-| 3 | Set GPIO33 HIGH (deassert reset) | 200 ms |
+| 1 | High, inactive | 500 ms |
+| 2 | Low, asserted | 200 ms |
+| 3 | High, deasserted | 200 ms |
 
-I.e. reset is **active-low**. A second, structurally similar reset path exists in
-the module (requesting the GPIO under the label `"rtl8367_gpio_reset"`, asserting
-low, waiting 200ms, then releasing) that appears to be a secondary/re-probe path
-rather than the main init sequence; its exact trigger condition was not determined.
+A second, structurally similar path requests the GPIO under the
+`rtl8367_gpio_reset` label, asserts it low, waits 200 ms and releases it.
+Its trigger condition was not established.
 
-This is new, actionable information for `DEVICE-TREE.md`: the DTS's
-`reset-gpios` property should specify `GPIO_ACTIVE_LOW` and, if the binding
-supports it, the vendor's timing (500ms pre-assert settle, 200ms assert, 200ms
-post-deassert settle) is a reasonable default to match known-working vendor
-behavior, though the binding may not expose settle time directly.
+An earlier static analysis attributed that reset line to GPIO33. A direct
+read of the live OEM device tree on this unit instead gives
+`/proc/device-tree/soc/ess-instance/ess-switch1@1/reset_gpio = 0x27`,
+or GPIO39. GPIO33 is the 2.4 GHz LED. The descriptor-level sequence
+does not override the live board-specific GPIO assignment. The current
+DTS uses GPIO39 with `GPIO_ACTIVE_LOW`; see `HARDWARE.md`.
 
 ## SGMII / CPU port bring-up
 
-`[OPEN]`/`[SOURCE]`, actively disputed. The GPL source (`dal_rtl8367d_port.c`) shows
-CPU-port SerDes configuration driven through register `RTL8367D_REG_SDS_MISC`
-(`0x1d11`) for SerDes0/MAC6 and `RTL8367D_REG_SDS1_MISC0` (`0x1d78`) for SerDes1,
-with mode constants including `SGMII = 0x02` and `HSGMII = 0x12`. This confirms both
-modes exist as options in the vendor driver, it does not by itself establish which
-one this device actually uses.
+`[SOURCE]` The vendor GPL source defines SGMII and HSGMII SerDes modes
+and includes `MODE_EXT_HSGMII` / `PORT_SPEED_2500M` configuration for
+the CPU trunk. The exact order of the vendor driver's register writes
+has not been independently cross-checked against the shipped
+`qca-ssdk.ko` disassembly; the mode constants alone do not prove the
+runtime setting.
 
-This finding is included with lower confidence than the sections above: it was
-reported from GPL source reading during an earlier analysis pass in this project
-that did not produce the same disassembly-level, instruction-by-instruction
-cross-check applied to chip detection and MDIO above. The register numbers and
-mode constants are taken directly from vendor header definitions (high confidence
-for their existence), but the exact bit-field sequence of writes during bring-up
-has not been independently re-verified against `.ko` disassembly in this pass.
-Treat the register/constant names as reliable and the precise write ordering as
-indicative, not confirmed.
+The GPL headers identify `RTL8367D_REG_SDS_MISC` (`0x1d11`) for
+SerDes0/MAC6 and `RTL8367D_REG_SDS1_MISC0` (`0x1d78`) for SerDes1,
+with mode constants `SGMII = 0x02` and `HSGMII = 0x12`. These are
+source-level definitions; the precise runtime write sequence remains
+unverified against the shipped module.
 
-**Update: the question of which mode this device actually uses is now a live
-dispute, not an open-but-unexamined detail.** Three additional data points were
-found after the analysis above:
+The runtime and static observations must be kept distinct:
 
-- The OEM U-Boot source for this device (`ipq5018_gmac.c`) configures
-  `MODE_EXT_HSGMII` with `PORT_SPEED_2500M` for the GMAC1 to switch link, i.e. the
-  `HSGMII = 0x12` constant above, not `SGMII = 0x02`.
-- The DTB extracted from this device's own stock firmware shows `phy-mode = "sgmii"`
-  with a `fixed-link` speed of 1000, i.e. the `SGMII = 0x02` constant, contradicting
-  the U-Boot source for the same device.
-- Production OpenWrt DTS files for sibling TP-Link boards on the same switch
-  platform (AX53 v2, AX58 v2, from `kuncy7/openwrt-nss-edma`) use `2500base-x` at a
-  50MHz reference clock, matching the HSGMII reading, not the DTB reading.
+- Stock hardware clock measurements show UNIPHY/GMAC TX and RX clocks
+  at 312.5 MHz, consistent with a 2.5 Gbit/s SerDes rate.
+- The OEM DTB contains `phy-mode = "sgmii"` on the GMAC side and
+  `forced-speed = <0x9c4>` (2500), `forced-duplex = <1>` on the switch's
+  `port@1`. The `phy-mode` text alone is not a speed measurement.
+- The project's DTS uses `2500base-x`, fixed speed 2500 and `pause`
+  on the GMAC and switch CPU-port fixed links.
+- The v0.2 OpenWrt boot log reports the switch and GMAC CPU link up
+  at 2.5 Gbit/s full duplex with RX/TX flow control reported.
 
-This is an unresolved internal contradiction between two OEM sources for the same
-device (U-Boot source code vs. extracted DTB), not a disagreement between this
-project and a reference. It is possible the OEM runs the link below its negotiated
-maximum in the stock DTB for reasons not evident from source alone. Resolving this
-needs either a boot log showing the actual negotiated link speed on this device, or
-a direct read of the UNIPHY/SerDes PCS mode registers (`RTL8367D_REG_SDS_MISC` /
-`RTL8367D_REG_SDS1_MISC0` above) on a running unit. See `docs/HARDWARE.md` and
-`docs/DEVICE-TREE.md` for how this currently affects the DTS, and
-`docs/KNOWN-ISSUES.md` §4 for the tracked open question, including a related finding
-that a `pause` property on the `fixed-link` node may be required regardless of which
-speed is correct.
+Together, the OEM runtime measurement and the v0.2 OpenWrt link log
+support HSGMII 2.5G operation. The log does not demonstrate packet
+forwarding through every physical port or effective pause-frame exchange.
+Those remain separate tests; see `TESTING.md` and `KNOWN-ISSUES.md` §4.
 
 ## Port mapping
 
@@ -233,7 +218,7 @@ speed is correct.
 | 0 | WAN-side member | Appears alongside port 5 in the WAN VLAN |
 | 1–4 | LAN1–LAN4 | Untagged per-VLAN |
 | 5 | WAN | |
-| 6 (tagged) | CPU (SoC) | Appears tagged in every LAN VLAN; this is the SGMII uplink described above |
+| 6 (tagged) | CPU (SoC) | Appears tagged in every LAN VLAN; this is the CPU trunk described above |
 
 This is consistent with `HARDWARE.md`'s existing `LAN_PORTS`/`WAN_PORTS`/`CPU_PORTS`
 table from `core_phy.sh`, with one clarification: `CPU_PORTS="16"` in that script is
@@ -263,9 +248,10 @@ in case it's useful for future on-device debugging.
   family and was used to *identify* stripped functions by structural comparison,
   not assumed to be identical to the compiled binary. Every finding above states
   whether it was confirmed against the disassembly, the source, or both.
-- All findings here concern **register-level protocol and detection logic only**.
-  None of this constitutes evidence that Ethernet traffic actually passes over the
-  SGMII link on physical hardware; see `KNOWN-ISSUES.md` §4, which remains open.
+- The register-level findings above do not establish reliable Ethernet
+  traffic through physical ports. The separate v0.2 OpenWrt log reports
+  a 2.5 Gbit/s CPU link, while per-port forwarding remains unverified;
+  see `KNOWN-ISSUES.md` §4.
 - This analysis used firmware 1.1.2's `qca-ssdk.ko`. `KNOWN-ISSUES.md` §7 already
   established that the RTL8367-relevant code is byte-identical between the 1.0.1
   and 1.1.2 builds, so these findings are expected to apply equally to both.

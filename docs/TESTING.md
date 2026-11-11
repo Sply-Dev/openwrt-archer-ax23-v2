@@ -1,152 +1,87 @@
 # Testing status
 
-> **No functional boot on a physical TP-Link Archer AX23 v2 has been demonstrated.**
-> Everything below this line is either a static check against the build tree and
-> vendor firmware, or a planned hardware test that has not been run yet. Treat
-> anything not explicitly marked as run-on-real-hardware as unvalidated.
+> **Hardware result (v0.2, 2026-11-10):** Two PuTTY sessions show U-Boot console
+> access, TFTP loading of an initramfs FIT, kernel startup and an OpenWrt shell on
+> a physical AX23 v2. These are v0.2 tests. The v0.3 test image has been built,
+> but no v0.3 hardware result is recorded here.
 
-The authoritative, evidence-tagged source for this is
-[`archer-ax23-v2-port-status.md`](archer-ax23-v2-port-status.md), which should be
-treated as the primary document. This file is a navigation aid on top of it, written
-to make "what's actually been checked" and "what to test next, in what order" easier
-to find quickly. If the two ever disagree, `archer-ax23-v2-port-status.md` is correct.
+The [`archer-ax23-v2-port-status.md`](archer-ax23-v2-port-status.md) file is a
+dated 2026-10-17 snapshot. Its post-snapshot updates record later results;
+the original audit is retained for historical context.
 
-## For now, no testing with UART in this project
+## Validation stages
 
-I don't have a UART/level-shifter for this device, so I haven't been able to run
-any of the serial-console tests myself (see `KNOWN-ISSUES.md` §12). If you have an
-AX23 v2 and a UART adapter, please test and report back, even a partial or failed
-result is useful. The sections below (H0–H2) are the correct procedure for anyone
-with physical UART access; the "No-UART path" section covers what can still be
-checked over the network only, which is what I've relied on so far.
+| Stage | v0.2 evidence |
+|---|---|
+| Root access to OEM firmware | Obtained separately for OEM runtime inspection; it does not establish OpenWrt operation |
+| Interactive U-Boot and image loading | Serial logs show command access, TFTP transfer and `bootm` execution |
+| OpenWrt kernel and userspace | Linux 6.18.55 started and reached `root@OpenWrt:~#` from initramfs |
+| Switch discovery and CPU link | Driver reports RTL8367S-VB and DSA ports; GMAC and switch report fixed 2500base-x link up, 2.5 Gbit/s full duplex with RX/TX flow control reported |
+| External ports and traffic | `lan1` returned carrier 1 after `ip link set lan1 up`; the other four ports returned 0 in that sequence. No per-port traffic, DHCP, VLAN or sustained forwarding result was supplied |
+| Wi-Fi | Deliberately not configured for these tests. Board-data loading failed in the logs; the cause and radio compatibility remain untested |
+| v0.3 and persistent installation | v0.3 image built, hardware result pending. No `sysupgrade` or A/B rollback validation follows from the v0.2 RAM boot |
 
-## What "tested" means in this repository
+The owner-provided v0.2 PuTTY logs include these representative lines.
+The full logs are not included in this public repository because they
+contain device identifiers:
 
-Two different things get called "testing" in this project, and they are not
-interchangeable:
+```text
+rtl8365mb-mdio 90000.mdio-1:1d: found an RTL8367S-VB switch
+rtl8365mb-mdio 90000.mdio-1:1d: Link is Up - 2.5Gbps/Full - flow control rx/tx
+ipq5018-gmac-dwmac 39d00000.ethernet eth0: Link is Up - 2.5Gbps/Full - flow control rx/tx
+br-lan: port 1(eth0) entered forwarding state
+OpenWrt SNAPSHOT, r37094+2-98b1185d03
+```
 
-1. **Static verification**: checking that the build tree, compiled artifacts, and
-   vendor firmware are internally consistent (e.g. "does the compiled DTB match the
-   source DTS", "do the NAND partition offsets add up without gaps"). This catches
-   mistakes before they reach hardware. It does **not** prove the hardware will work.
-2. **Hardware validation**: actually running something on a physical AX23 v2 and
-   observing the result. This is the only kind of test that validates the port. None
-   has been performed yet.
+The `br-lan` line names `eth0`, but the log alone does not show the full
+generated network configuration. That must be inspected in v0.3.
 
-A QEMU boot of the initramfs image (see `BUILD.md`) falls into neither category
-cleanly: it exercises the generic kernel/userspace, but QEMU's `virt` machine does not
-emulate the IPQ5018 SoC, the RTL8367 switch, the NAND flash, or either radio. A
-successful QEMU boot is a useful smoke test for userspace breakage; it says nothing
-about whether this port works on the real board.
+Before the ports were administratively enabled, reading their `carrier` entries
+returned `Invalid argument`. The test image did not contain `ethtool`. The later
+`carrier` values do not establish why the other ports read 0, or that `lan1`
+forwarded packets.
+
+Patch `0002` adds the AX23 v2 case in `board.d/02_network` for LAN/WAN default
+roles. It was added after these v0.2 logs. These tests therefore do not show
+whether it corrected the default bridge or the inconsistent external link
+behavior. It does not modify the DSA driver or PHY link logic.
+
+A QEMU boot of the initramfs, if performed, exercises generic kernel/userspace
+only; QEMU's `virt` machine does not emulate the IPQ5018, RTL8367, NAND or radios.
 
 ## Static verification already done
 
-Summarized from `archer-ax23-v2-port-status.md` section 2 (full detail and exact
-commands there):
+The first four rows summarize the 2026-10-17 snapshot in
+`archer-ax23-v2-port-status.md` section 2. Later integration changes
+are identified separately:
 
 | Check | What it confirmed |
 |---|---|
 | DTB consistency | The compiled DTB matches the source DTS byte-for-byte in the relevant nodes (switch, radios, boot args) |
 | Partition table | The 16 NAND partitions in the DTS are contiguous, no gaps/overlaps, sized consistently with the image size config |
 | Kernel configuration | The switch driver and its dependencies (`NET_DSA_REALTEK*`, `PCS_QCA_UNIPHY`) are enabled and built in |
-| Switch patches present | All 10 `777-0x` patches (pre-v7 revision, see `KNOWN-ISSUES.md` §8) are applied and their keywords appear in the compiled driver source; kernel compiles cleanly with no driver-specific warnings |
-| Missing integration points | `02_network`, `01_leds`, and `platform.sh` have **no** AX23 v2-specific case yet, these default to generic fallback behavior, untested |
+| Switch patches present | The 2026-10-17 snapshot reviewed eight v1 patches. The tree later moved to the project's ten-patch pre-v7/v7 series. The v0.2 logs are separate hardware evidence |
+| Integration points | Patch `0002` now adds the `02_network` case, after the v0.2 tests. Board-specific LED setup and `platform.sh` upgrade handling are still absent |
 
-**None of these confirm the hardware works.** They confirm the build is internally
-consistent and matches what was intended, which is a precondition for a hardware test
-being meaningful, not a substitute for one.
+These static checks apply to the build tree reviewed at the time. The v0.2 serial
+logs provide separate hardware evidence; neither set of checks validates
+persistent installation or complete peripheral operation.
 
-## Hardware tests, planned, not yet run
+## Remaining validation
 
-Full list with pass criteria in `archer-ax23-v2-port-status.md` section 3 (tests
-H0–H9+). Ground rules for all of them: **no firmware is written to the router without
-explicit authorization**, and tests that involve flashing are planned to go through
-the confirmed A/B mechanism (`fw_setenv tp_boot_idx`, writing the inactive
-`rootfs`/`rootfs_1` slot, see `KNOWN-ISSUES.md` §9 and `HARDWARE.md`), which gives a
-safe fallback to the current working slot if the new image fails to boot.
+For v0.3, record the tested image hash and the source revision alongside a new
+serial log. Then check the generated `/etc/config/network` and `br-lan` members to
+verify the `02_network` default roles. Test each physical LAN and WAN port with
+known cable placement, link state, packet exchange, addressing and repeated
+up/down cycles. Capture switch and GMAC errors during sustained traffic. These
+checks are needed before attributing any improvement to patch `0002`.
 
-Recommended order, since each depends on the previous one succeeding. Each entry
-notes whether it needs UART or can be done over the network only.
+The 2.5 Gbit/s CPU link reported by the v0.2 log is evidence of link bring-up
+under OpenWrt. The reported RX/TX flow-control setting is not a measurement of
+pause frames or throughput through a physical port. Wi-Fi, LEDs, buttons, MAC
+assignment, persistence and rollback require separate tests when they enter
+scope. Wi-Fi was intentionally omitted from the v0.2 test plan.
 
-1. **H0 (Preconditions).** *Needs UART.* Confirm UART console access works at all
-   (the OEM U-Boot accepting console input / loading an image over the network is
-   not yet established, see `HARDWARE.md` for the UART pinout). Have a NAND
-   backup and recovery plan ready before anything else. I don't have UART for this
-   device, so this test can only be run by a volunteer with physical serial access.
-2. **H1 (Non-persistent boot).** *Needs UART* (as scoped), or an equivalent
-   network-only signal, see "No-UART path" below. Load `initramfs-uImage.itb` over
-   UART/TFTP without touching NAND. Pass criterion: kernel starts, serial console
-   produces output at 115200 baud, userspace is reached.
-3. **H2 (Kernel log review).** *Needs UART.* With H1 working, check that NAND
-   partitions match the table in `HARDWARE.md`, no kernel oops/panic, and the
-   Ethernet subsystem (ESS/UNIPHY) initializes without error. This specifically
-   includes confirming the **HSGMII 2.5G link mode** (`KNOWN-ISSUES.md` §4) is
-   what the kernel actually negotiates: the single most useful boot-log detail
-   for anyone with UART to capture and report.
-4. **H3 (Switch detection).** Confirm `rtl8365mb` reports chip ID `0x6642` / chip
-   revision `0x0010` and registers the `wan`/`lan1`–`lan4`/`cpu` ports, and ideally
-   captures the driver's own probe message (`"found an RTL8367S-VB switch"` vs
-   `"found an RTL8367S switch"`). Static analysis (two independent lines of
-   evidence, see `docs/RESEARCH.md` and `docs/KNOWN-ISSUES.md` §1) has already
-   identified this chip as RTL8367S-VB, "family D", resolving the earlier `0x6642`
-   vs `0x6367` identification question. What H3 still needs to confirm is that this
-   holds on the physical unit, not just in the vendor firmware's own driver, and
-   that the switch is actually reachable and functional over MDIO on real hardware,
-   not just correctly identified in theory. *Needs UART* for the probe message;
-   functional reachability (DHCP lease / ping on a LAN port) is also visible
-   without UART, see below.
-5. **H4 and beyond:** see `archer-ax23-v2-port-status.md` for the rest of the
-   sequence (traffic validation per port, radio bring-up, LED/button checks, MAC
-   address verification against `KNOWN-ISSUES.md` §3, sysupgrade round-trip).
-
-### No-UART path: what can be verified without serial access
-
-Since I don't have UART for this device, the practical test I can actually run is a
-**sysupgrade attempt plus network-level observation**, not the H0–H2 sequence above
-as written. This is weaker evidence than a boot log (it cannot distinguish "didn't
-boot" from "booted but didn't bring up the network the way expected"), but it's the
-only option available without a physical UART connection:
-
-- Flash via sysupgrade to the inactive slot, following the A/B mechanism in
-  `KNOWN-ISSUES.md` §9.
-- Run continuous `ping`/`arping` against the router's expected LAN address
-  starting just before power-on/reboot. If OpenWrt boots and brings up the
-  HSGMII trunk and at least one LAN port, ICMP should respond before SSH would
-  even be reachable.
-- If there is no response within a reasonable window and the A/B fallback
-  (`KNOWN-ISSUES.md` §9, confirmed mechanism) kicks in, the router should return
-  to the previous working slot and respond on its old address. This is itself a
-  signal (a failed boot was caught and recovered automatically), not a successful
-  test, but it rules out a bricked unit.
-- **Known gap, accepted:** a silent failure on both slots (neither new image nor
-  fallback responding) has no diagnosis path without UART. This is treated as an
-  explicit abort criterion rather than an open mystery to keep investigating blind.
-  If it happens, the next step is TFTP recovery via the bootloader if it still
-  responds, not further network-level guessing.
-
-This path can confirm or refute the HSGMII link mode indirectly (no network
-response at all, versus a response once pause/link settle, versus a confirmed-good
-fallback), but cannot substitute for a UART-based H2/H3 capture. Anyone able to
-test with actual serial access should prefer the H0–H2 sequence above and report
-the raw boot log, see "If you're reproducing this and have hardware" below.
-
-## If you're reproducing this and have hardware
-
-If you get further than H0 on a physical unit, the single most useful thing you can
-report back is **raw console output**, not a summary: paste the actual boot log. Most
-of the open questions in `KNOWN-ISSUES.md` (switch link mode, chip revision, MAC
-offset, LED polarity) are resolved by reading specific lines out of a real boot log
-or a UART session, not by re-deriving them from the vendor firmware. The HSGMII vs
-SGMII link mode (`KNOWN-ISSUES.md` §4) is the single highest-value thing a boot log
-can resolve right now.
-
-If something fails, the static verification table above tells you what's already been
-double-checked on the build side. If a failure doesn't match anything in that list,
-it's new information, not a known gap.
-
-## If you have hardware but no UART
-
-Follow the "No-UART path" section above. Report what you tried, what responded and
-when, and whether the A/B fallback engaged. Even an inconclusive result (e.g. "no
-response from either slot, had to TFTP-recover") is useful information, since
-otherwise this is completely blind to that failure mode without UART.
+Persistent installation needs a board-specific upgrade design and independent
+validation of slot selection and recovery. A successful initramfs boot does not
+authorize use of the current `factory` or `sysupgrade` images for NAND installation.

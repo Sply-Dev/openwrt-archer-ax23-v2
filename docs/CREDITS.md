@@ -16,19 +16,19 @@ authors, so that credit lands where it belongs.
 
 The ten `rtl8365mb` switch driver patches in
 `target/linux/generic/pending-6.18/777-01` through `777-10` are **not this
-project's own work**. They are the `net-next` pre-v7 revision of the upstream
-series submitted as OpenWrt PR [#19644](https://github.com/openwrt/openwrt/pull/19644)
-(`namiltd/openwrt`, branch `Realtek_DSA`) - not yet submitted to `net-next`
-as a formal v7, per the author's own clarification on the OpenWrt forum
-(`t/254876`, post #9): it becomes v7 once the `net-next` merge window
-reopens and the series is formally posted. They were written by:
+project's own work**. The files currently carry `net-next v7` headers
+and correspond to the pre-v7/v7 series used in this project's builds
+and tests (OpenWrt PR [#19644](https://github.com/openwrt/openwrt/pull/19644)).
+Those labels are equivalent in this project; they do not identify two
+separately validated implementations. v9 and v10 have not been
+incorporated or tested here. The authors are:
 
 - **Mieczyslaw Nalewaj** (`namiltd@yahoo.com`) - author of all ten patches
   (`777-01` through `777-10`)
 - **Fabiano Tassotti** (`fabianotassotti@gmail.com`) - co-developed `777-07`
   (`Co-developed-by:`/`Signed-off-by:`)
 
-The following reviewed patches in this pre-v7 revision:
+The following reviewers are credited in the carried patch headers:
 
 - **Linus Walleij** (`linusw@kernel.org`) - `Reviewed-by` on `777-01`, `777-02`,
   and `777-07`
@@ -36,20 +36,19 @@ The following reviewed patches in this pre-v7 revision:
   `777-01` and `777-02`
 
 Each patch file keeps its original `From:`/`Signed-off-by:`/`Reviewed-by:`
-header, which is the authoritative record of authorship and review - see the
-patch files themselves for the exact attribution per patch. This repository carries them because the AX23 v2's switch (RTL8367SC per
+header, which records authorship and review. See the patch files for
+exact attribution. This repository carries them because the AX23 v2's switch (RTL8367SC per
 static chip-ID analysis, "family D" - see `KNOWN-ISSUES.md` §1; RTL8367SC is
 only the commercial name printed on the unit, not the driver-level chip
 identity) needs the functionality they add, and the DTS in this tree assumes
-they're applied -
-see [`DEVICE-TREE.md`](DEVICE-TREE.md). They are licensed `GPL-2.0-or-later`
+they are applied; see [`DEVICE-TREE.md`](DEVICE-TREE.md). They are licensed `GPL-2.0-or-later`
 per the kernel tree they patch; see each patch file for specifics.
 
 > **Note on the earlier (v1) revision:** this repository previously carried
 > an early v1 revision of this same series (eight patches, `777-01` through
 > `777-08`). That revision was also written by Mieczyslaw Nalewaj, with
 > `Fabiano Tassotti` and `Oleg Gavrilov` credited as co-signers on individual
-> patches. It was replaced in full by the pre-v7 revision above - see
+> patches. It was replaced in full by the current ten-patch series; see
 > [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) §8 for what changed between revisions,
 > and §8.1-8.2 for how this series relates to the separate, already-merged
 > Johan Alvarado SerDes/PCS series.

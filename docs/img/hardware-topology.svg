@@ -1,6 +1,6 @@
 <svg width="680" height="480" viewBox="0 0 680 480" xmlns="http://www.w3.org/2000/svg" role="img">
 <title>TP-Link Archer AX23 v2 hardware topology (dark theme)</title>
-<desc>SoC Qualcomm IPQ5018 connected via SGMII to the switch Realtek RTL8367SC, which exposes 5 Ethernet ports (wan, lan1-lan4); two radios WiFi (2.4GHz internal and 5GHz QCN6102) come out of SoC; NAND SPI 128MB with 16 partitions.</desc>
+<desc>SoC Qualcomm IPQ5018 connected via HSGMII 2.5G to the switch Realtek RTL8367SC, which exposes 5 Ethernet ports (wan, lan1-lan4); two radios WiFi (2.4GHz internal and 5GHz QCN6102) come out of SoC; NAND SPI 128MB with 16 partitions.</desc>
 
 <defs>
 <marker id="arrow-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">

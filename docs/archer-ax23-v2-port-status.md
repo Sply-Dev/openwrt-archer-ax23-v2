@@ -1,53 +1,60 @@
 # TP-Link Archer AX23 v2 - OpenWrt port status
 
 Status document for the `tplink_archer-ax23-v2` device (target `qualcommax/ipq50xx`).
-Last reviewed: 2026-10-17.
+Snapshot date: 2026-10-17. Current post-snapshot update: 2026-11-11.
 
-> **A functional boot on a physical TP-Link Archer AX23 v2 has NOT been demonstrated.**
-> Everything recorded below is a build result or a static inspection of files and build
-> artifacts. No image from this tree has been run on the real device, and no result in this
-> document should be read as hardware validation. A QEMU boot would not change that: it
-> does not exercise this SoC, switch, NAND or radios.
+> **Snapshot status on 2026-10-17:** a functional boot on physical hardware had not yet been demonstrated.
+> The original audit below records the state on that date. Later hardware results
+> are recorded in the dated updates before the audit. QEMU does not exercise this
+> SoC, switch, NAND or radios.
 
-> **Post-snapshot update (2026-10-31):** the `777-0x` switch driver patches referenced
-> throughout this document (S8, R19, and the summary table in section 5) have since been
-> migrated from the v1 revision described below to the upstream `net-next` pre-v7 revision
-> (10 patches, `777-01` through `777-10`, OpenWrt PR [#19644](https://github.com/openwrt/openwrt/pull/19644),
-> not yet formally submitted as v7 - see `KNOWN-ISSUES.md` §8 for the author's own clarification).
-> This snapshot's references to "eight patches" and "v5/v6" reflect the state of the tree
-> on 2026-10-17 and were **not** updated to match - this document remains an unmodified
-> audit of that date, per the Snapshot Note above. For the current state of the switch
-> driver patch set, see [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) §8 and §10.
+> **Post-snapshot update (2026-10-31):** the eight v1 switch patches
+> described in the original audit were replaced by the project's
+> ten-patch pre-v7/v7 series (`777-01` through `777-10`, OpenWrt PR
+> [#19644](https://github.com/openwrt/openwrt/pull/19644)). The current
+> files carry v7 headers. In this project's build and test history,
+> pre-v7 and v7 denote the same series. The snapshot references to v1
+> remain below as a record of the 2026-10-17 state.
 
 > **Post-snapshot update (2026-11-08):** two further corrections to this snapshot's own
-> content, neither reflected below (per the Snapshot Note, this document is not edited
-> retroactively):
+> content, neither reflected below (the dated audit below is retained without retroactive edits):
 > - **Switch reset GPIO.** S5 and section 1.2 state the switch reset line as GPIO33. This
 >   has since been corrected to **GPIO39**, confirmed by direct read of the live device
 >   tree on a physical unit (`/proc/device-tree/soc/ess-instance/ess-switch1@1/reset_gpio`
 >   = `0x27` = 39). GPIO33 is LED-only (2.4GHz). The GPIO33 figure in this snapshot traced
 >   back to a third-party forum report, not an independent measurement, and did not match
->   this device's own device tree once checked directly. See `HARDWARE.md`'s GPIO map and
->   `KNOWN-ISSUES.md` §11.
-> - **CPU trunk link mode.** R4 describes SGMII vs HSGMII as an open, unresolved dispute
->   between two OEM sources (U-Boot source vs. stock DTB) at the time of this snapshot.
->   This has since been resolved in favor of **HSGMII 2.5G**: a direct physical clock
->   measurement on real hardware (312.5MHz, only explainable by 2500Base-X) was obtained
->   after this snapshot was written, and the apparent DTB/U-Boot contradiction R4 describes
->   turned out not to be a real contradiction, once it's understood that `phy-mode =
->   "sgmii"` names a pinout family on this device's kernel fork rather than a speed by
->   itself. The current DTS uses `2500base-x` with `pause` on both fixed-link nodes. This
->   is still unverified under the OpenWrt driver stack on physical hardware (no UART
->   available to this project, see `KNOWN-ISSUES.md` §12) — only the OEM-side evidence and
->   the physical clock measurement are resolved. See `KNOWN-ISSUES.md` §4 and
->   `RESEARCH.md`'s "SGMII / CPU port bring-up" section for the full derivation,
->   including why the SGMII reading this snapshot describes as matching the DTB was itself
->   later found to be a misreading of vendor terminology, not a fact about this device's
->   intended link speed.
+>   this device's own device tree once checked directly. See `HARDWARE.md`'s GPIO map.
+> - **CPU trunk link mode.** The original R4 treated SGMII versus HSGMII
+>   as unresolved. Later stock-hardware measurements found the UNIPHY/GMAC
+>   clocks at 312.5 MHz; the OEM DTB also records a forced switch-port
+>   speed of 2500 alongside `phy-mode = "sgmii"` on the GMAC side.
+>   The current DTS uses `2500base-x` and `pause` on both fixed links.
+>   These OEM observations did not yet establish OpenWrt link operation
+>   at the time of this update. The v0.2 OpenWrt result is recorded below.
 >
-> Both items are static-analysis / measurement corrections, not hardware validation of
-> Ethernet traffic over the link — that remains open, see `TESTING.md`.
+> Both items were corrections to the earlier analysis. The later v0.2
+> OpenWrt link result is recorded in the 2026-11-11 update below; external-port
+> traffic remains unverified. See `TESTING.md`.
 
+> **Post-snapshot update (2026-11-11, v0.2 hardware tests):** two serial logs
+> from 2026-11-10 show interactive U-Boot access, TFTP loading, `bootm`,
+> Linux 6.18.55 startup and an OpenWrt initramfs shell. The OpenWrt
+> driver logged RTL8367S-VB detection, DSA ports `wan` and `lan1`-`lan4`,
+> and a fixed 2.5 Gbit/s full-duplex CPU link with RX/TX flow control
+> reported. A separate shell test returned carrier 1 for `lan1` after
+> administrative activation; `wan` and `lan2`-`lan4` returned 0 in that
+> sequence. Per-port forwarding, VLAN operation and pause frames have
+> not been demonstrated by those results.
+>
+> Wi-Fi compatibility was deliberately outside the v0.2 test scope.
+> Radio board-data loading failed in the logs, without an established
+> cause. No Wi-Fi functionality is claimed. Patch `0002` subsequently
+> added the AX23 v2 `02_network` LAN/WAN defaults; the v0.2 logs predate
+> it and cannot validate its effect. The v0.3 test image has been built,
+> but a v0.3 hardware result has not yet been recorded. v9/v10 switch
+> patches have not been incorporated or tested. The historical audit
+> below still describes the 2026-10-17 implementation.
+>
 ## Scope and evidence conventions
 
 Baseline reviewed:
@@ -140,7 +147,7 @@ Not checked in this review: `dtc` warning output, rootfs/package contents inside
 repository, so no QEMU result is claimed), and the origin of the root-owned `core.8` / `core.9`
 and `<stdin>.s` files.
 
-### 2.1 Driver source cross-check (ath11k, this build tree) — added 2026-10-27
+### 2.1 Driver source cross-check (ath11k, this build tree), added 2026-10-27
 
 Not in the original review scope (2026-10-17). Read directly from
 `build_dir/target-aarch64_cortex-a53_musl/linux-qualcommax_ipq50xx/mac80211-regular/backports-7.2/drivers/net/wireless/ath/ath11k/{core,qmi}.c`
@@ -148,11 +155,11 @@ in this tree, at the version this build was compiled against. `[SOURCE]`
 
 | Check | Finding |
 |---|---|
-| Does `qcom,ath11k-fw-memory-mode` have any effect? | Yes. `core.c` (~line 2698) reads the property and overwrites `ab->hw_params.fw_mem_mode`, which `qmi.c:3389` later copies into `ab->qmi.target_mem_mode`. That value's only use in the driver is `req.mem_cfg_mode` in the QMI firmware-memory-request (`qmi.c:1723`) — it is forwarded to firmware, not used to size any host-side (Linux) buffer or ring. This contradicts a claim made in a public OpenWrt PR discussion (`openwrt/openwrt#21495`) that this property "effect nothing about memory usage"; in this tree's driver version it clearly does something, though what firmware does with mode 2 internally was not and cannot be checked from source alone. |
+| Does `qcom,ath11k-fw-memory-mode` have any effect? | Yes. `core.c` (~line 2698) reads the property and overwrites `ab->hw_params.fw_mem_mode`, which `qmi.c:3389` later copies into `ab->qmi.target_mem_mode`. That value's only use in the driver is `req.mem_cfg_mode` in the QMI firmware-memory-request (`qmi.c:1723`); it is forwarded to firmware, not used to size any host-side (Linux) buffer or ring. This contradicts a claim made in a public OpenWrt PR discussion (`openwrt/openwrt#21495`) that this property "effect nothing about memory usage"; in this tree's driver version it clearly does something, though what firmware does with mode 2 internally was not and cannot be checked from source alone. |
 | Does the DTS need `qcom,caldb-addr`? | Not necessarily. `qmi.c` only reads `qcom,caldb-addr` when `ath11k_core_coldboot_cal_support()` is true, which in turn reads `hw_params.coldboot_cal_mm` (per-SoC, compile-time). The QCN6122 entry in this driver version has `coldboot_cal_mm = false`; the IPQ5018 entry's value was not located in this review. Absence of `caldb-addr` in our DTS is therefore not necessarily a gap. `[OPEN]` for the IPQ5018 radio specifically. |
-| `qcom,bdf-addr` / `qcom,m3-dump-addr` format | Confirmed as a single `u32`, not an array — `of_property_read_u32()` in both `qmi.c:2077` (BDF) and `qmi.c:2115` (M3 dump). Our DTS values are in this format. |
+| `qcom,bdf-addr` / `qcom,m3-dump-addr` format | Confirmed as a single `u32`, not an array; `of_property_read_u32()` in both `qmi.c:2077` (BDF) and `qmi.c:2115` (M3 dump). Our DTS values are in this format. |
 | Per-SoC hardcoded defaults (`hw_params`, used only if the DTS property is absent) | IPQ5018 (`ATH11K_HW_IPQ5018_HW10`, `core.c:664`): `bdf_addr = 0x4BA00000`, `board_size = 256*1024`, `cal_offset = 128*1024`. QCN6122 (`ATH11K_HW_QCN6122_HW10`, `core.c:~930`): `bdf_addr = 0x4D200000`, `fw_mem_mode = 1` (default), `m3_fw_support = false` (default), same `board_size`/`cal_offset`. |
-| Our DTS values vs. driver defaults | IPQ5018: `0x4c400000` (ours) vs `0x4BA00000` (driver default) — different, DTS value wins per the `of_property_read_u32` fallback logic above. QCN6122: `0x4d100000` (ours) vs `0x4D200000` (driver default) — same pattern. Neither pairing was found documented as an intentional choice anywhere in-tree; origin of our two values is `[OPEN]`. |
+| Our DTS values vs. driver defaults | IPQ5018: `0x4c400000` (ours) vs `0x4BA00000` (driver default); different, DTS value wins per the `of_property_read_u32` fallback logic above. QCN6122: `0x4d100000` (ours) vs `0x4D200000` (driver default); same pattern. Neither pairing was found documented as an intentional choice anywhere in-tree; origin of our two values is `[OPEN]`. |
 | Do our two BDF regions overlap each other or exceed `q6_region`? | No overlap: `0x4c400000`-`0x4c440000` (IPQ5018 BDF, 256 KiB) and `0x4d100000`-`0x4d140000` (QCN6122 BDF, 256 KiB) are well separated, both inside `q6_region` (`0x4b000000`-`0x4e000000`, 48 MiB, set by `ipq5018-qcn6122.dtsi`). `m3-dump-addr = 0x4df00000` on `wifi1` sits close to the top of `q6_region` (0x100000 / 1 MiB of margin to `0x4e000000`); its actual size is firmware-reported at runtime (`ab->qmi.target_mem[i].size`, not a compile-time constant), so whether it fits could not be confirmed from source. `[OPEN]`. |
 | Is `smallbuffers` (upstream PR `openwrt/openwrt#21495`) present in this tree? | No. `grep` for `ATH11K_SMALLBUFFERS`/`ath11k-smallbuffers`/`ath11k-ahb-smallbuffers` in `package/kernel/mac80211/ath.mk` returns nothing. `Device/tplink_archer-ax23-v2`'s `DEVICE_PACKAGES` does not list any ath11k kmod explicitly, so the regular `kmod-ath11k`/`kmod-ath11k-ahb` from `qualcommax` `DEFAULT_PACKAGES` is what would ship. The PR's own measurement on a comparable board (IPQ5018+QCN6122, 256 MB, PZ-L8) showed available RAM going from ~10 MB to ~68 MB with the smallbuffers variant; whether the same gain applies here is untested and the PR is unmerged upstream as of this review. |
 
@@ -161,7 +168,7 @@ DTS appears to be untested territory even relative to the public reference mater
 a real IPQ5018+QCN6122/256 MB board (PZ-L8, `openwrt/openwrt#21495` thread) was observed in a
 real boot log running `fw_mem_mode = 1` (the driver default for that SoC), not mode 2. No
 publicly reviewed report of mode 2 working on this exact radio pair was found. This does not
-mean mode 2 is wrong — the earlier project rationale was that mode 2 is required for 256 MB —
+mean mode 2 is wrong; the earlier project rationale was that mode 2 is required for 256 MB;
 but it is currently an unverified choice, not a confirmed-safe one. `[OPEN]`
 **Switch driver patch set**
 
@@ -176,7 +183,7 @@ but it is currently an unverified choice, not a confirmed-safe one. `[OPEN]`
   validation exists for the upstream series on a different device sharing this
   device's exact chip ID and family (`gusfm` tested v5/v6 on a TP-Link EX511 v2,
   RTL8367SC/`0x6642`, reporting stable 1Gbps SGMII link, 0 FCS/CRC/drop errors,
-  working VLAN bridging, and clean reboot cycles) — this is currently the strongest
+  working VLAN bridging, and clean reboot cycles); this is currently the strongest
   third-party hardware evidence available that this patch family works on this
   exact chip, on different hardware. `[SOURCE]`/`[OPEN]`. Pending action: update
   this tree's patches to v5/v6 before any physical hardware test is requested of a

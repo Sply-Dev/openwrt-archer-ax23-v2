@@ -1,10 +1,10 @@
 # Build instructions
 
-These instructions describe how to reproduce the OpenWrt build for the TP-Link Archer AX23 v2. They cover **building the firmware images, not flashing them**. See `TESTING.md` for the current hardware-validation status. As of this writing, no image has successfully booted on a physical AX23 v2.
+These instructions describe how to reproduce the OpenWrt build for the TP-Link Archer AX23 v2. They cover **building the firmware images, not flashing them**. See `TESTING.md` for the current hardware-validation status. The v0.2 initramfs booted from RAM via U-Boot/TFTP on 2026-11-10. The v0.3 test image has been built, with no v0.3 hardware result documented yet.
 
 ## Prerequisites
 
-Tested on Debian 13 (trixie) with GCC 14.2.0 and GNU Make 4.4.1. OpenWrt's own build requirements apply — see the [official OpenWrt build documentation](https://openwrt.org/docs/guide-developer/toolchain/install-buildsystem) for the full dependency list for your distribution.
+Tested on Debian 13 (trixie) with GCC 14.2.0 and GNU Make 4.4.1. OpenWrt's own build requirements apply; see the [official OpenWrt build documentation](https://openwrt.org/docs/guide-developer/toolchain/install-buildsystem) for the full dependency list for your distribution.
 
 Packages confirmed present in the environment used for the build:
 
@@ -53,7 +53,7 @@ for p in /path/to/ax23v2-public/target/linux/generic/pending-6.18/777-*.patch; d
 done
 ```
 
-The patches must be applied to the matching upstream source revision specified in Section 1.
+The patches must be applied to the matching upstream source revision specified in Section 1. In this project, the pre-v7 and v7 labels refer to the same series used for the documented builds; v9 and v10 have not been incorporated or tested here.
 
 ### Apply the ath11k calibration-data patch
 
@@ -117,7 +117,7 @@ For an initramfs image intended for non-persistent testing, also enable:
 CONFIG_TARGET_ROOTFS_INITRAMFS=y
 ```
 
-**The initramfs image is the intended first-stage hardware validation artifact.** See `TESTING.md` for the proposed RAM-only testing procedure and its prerequisites.
+**The v0.2 initramfs was booted from RAM on physical hardware.** See `TESTING.md` for the result and remaining validation.
 
 ## 4. Build
 
@@ -151,12 +151,12 @@ openwrt-qualcommax-ipq50xx-tplink_archer-ax23-v2.manifest
 
 **Generating an image does not mean that it is safe to flash.**
 
-None of these images have been successfully booted on a physical AX23 v2 as of this writing.
+The v0.2 initramfs image booted non-persistently on a physical AX23 v2. No persistent image or v0.3 hardware result is documented.
 
 - The `squashfs-factory.ubi` and `squashfs-sysupgrade.bin` images are **not authorized for flashing**.
 - Do not write any generated image to NAND or attempt a persistent installation.
-- The proposed first hardware-validation step is a non-persistent boot of `initramfs-uImage.itb` through UART/TFTP, contingent on test H0 confirming that the OEM U-Boot accepts interactive commands and network image loading.
-- No NAND write is part of the initial validation procedure.
+- U-Boot console access and TFTP loading were demonstrated with the v0.2 initramfs. Further testing should identify the exact image revision and record the observed link and traffic behavior.
+- The documented v0.2 boot loaded initramfs into RAM; it did not validate NAND installation.
 
 Read `TESTING.md` before attempting any hardware testing.
 
@@ -164,4 +164,4 @@ Read `TESTING.md` before attempting any hardware testing.
 
 - The `rtl8365mb` switch driver is built directly into the kernel in the tested configuration, not as a loadable module. The applied net-next v7 series contains support for multiple chip families; the presence of RTL8367S-VB support in the driver does not establish that this specific hardware configuration has been validated.
 - `CONFIG_SERIAL_AMBA_PL011` / `_CONSOLE` were enabled in `target/linux/qualcommax/config-6.18` specifically to allow booting the initramfs image under QEMU's `virt` machine for userspace-level smoke testing. **This does not exercise the IPQ5018 SoC, RTL8367 switch, NAND, or either radio.** A QEMU boot only demonstrates that the initramfs userspace itself is not broken. See `TESTING.md`.
-- No `board-2.bin` / `firmware-2.bin` was found for the QCN6122 radio in test builds — only `m3_fw`. The implications remain unresolved; see `docs/KNOWN-ISSUES.md`, Section 2.
+- Wi-Fi compatibility was deliberately outside the v0.2 test scope. The v0.2 log records board-data loading failures for the IPQ5018 and QCN6122 radios; the cause has not been established. See `docs/KNOWN-ISSUES.md`, Section 2.
