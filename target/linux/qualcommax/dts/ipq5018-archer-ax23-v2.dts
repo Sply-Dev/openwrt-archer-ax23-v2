@@ -40,11 +40,20 @@
  *     from a different physical unit (community member vram), not a
  *     direct reading of this device. GPIO33 is confirmed to be the
  *     2.4GHz LED, with no reset function
- *   - LED polarity and full 7-LED map confirmed by live visual
- *     inspection against sysfs brightness on stock hardware (root
- *     shell): all 7 LEDs on this board are active-low -- brightness=1
- *     (lit) corresponds to electrical level 0. GPIO33 (2.4GHz) added
- *     as a gpio-leds node on this basis.
+ *   - LED polarity and full 7-LED map confirmed 2026-11-12 by reading
+ *     the live device tree runtime on stock hardware (root shell):
+ *     /proc/device-tree/soc/leds/<name>/gpios for all 7 LEDs shows the
+ *     GPIO_ACTIVE_LOW flag bit absent (flags field = 0) in every case,
+ *     i.e. all 7 are GPIO_ACTIVE_HIGH per the gpio-specifier binding,
+ *     not active-low as an earlier pass concluded from visual
+ *     inspection alone. That earlier conclusion was wrong and is
+ *     corrected here after community member Veraxis reported the
+ *     power LED staying off in two separate hardware tests (v0.2 and
+ *     v0.3 on an AX21 v5 identifying as this model).
+ *     Still unverified: the phy0tpt/phy1tpt trigger assignment on the
+ *     two WiFi LEDs below remains an inference from registration
+ *     order, not confirmed against real phy0/phy1 enumeration. The
+ *     polarity fix here does not touch or validate that assumption.
  */
 
 /dts-v1/;
@@ -98,35 +107,35 @@
 		led_power: led-power {
 			function = LED_FUNCTION_POWER;
 			color = <LED_COLOR_ID_WHITE>;
-			gpios = <&tlmm 10 GPIO_ACTIVE_LOW>;
+			gpios = <&tlmm 10 GPIO_ACTIVE_HIGH>;
 			default-state = "on";
 		};
 
 		led-wan-orange {
 			label = "amber:wan";
-			gpios = <&tlmm 12 GPIO_ACTIVE_LOW>;
+			gpios = <&tlmm 12 GPIO_ACTIVE_HIGH>;
 		};
 
 		led-wan {
 			label = "white:wan";
-			gpios = <&tlmm 13 GPIO_ACTIVE_LOW>;
+			gpios = <&tlmm 13 GPIO_ACTIVE_HIGH>;
 		};
 
 		led-wps {
 			function = LED_FUNCTION_WPS;
 			color = <LED_COLOR_ID_WHITE>;
-			gpios = <&tlmm 22 GPIO_ACTIVE_LOW>;
+			gpios = <&tlmm 22 GPIO_ACTIVE_HIGH>;
 		};
 
 		led-lan {
 			function = LED_FUNCTION_LAN;
 			color = <LED_COLOR_ID_WHITE>;
-			gpios = <&tlmm 32 GPIO_ACTIVE_LOW>;
+			gpios = <&tlmm 32 GPIO_ACTIVE_HIGH>;
 		};
 
 		led-wifi-5g {
 			label = "white:wlan5g";
-			gpios = <&tlmm 11 GPIO_ACTIVE_LOW>;
+			gpios = <&tlmm 11 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "phy0tpt";
 		};
 
@@ -140,7 +149,7 @@
 		 */
 		led-wifi-2g {
 			label = "white:wlan2g";
-			gpios = <&tlmm 33 GPIO_ACTIVE_LOW>;
+			gpios = <&tlmm 33 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "phy1tpt";
 		};
 	};
