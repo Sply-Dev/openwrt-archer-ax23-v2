@@ -1,0 +1,15 @@
+diff --git a/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/01_leds b/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/01_leds
+index 6202221..6a9058d 100644
+--- a/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/01_leds
++++ b/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/01_leds
+@@ -43,6 +43,10 @@ mercusys,mr80x-v2)
+ 	ucidef_set_led_netdev "lan2" "LAN2" "green:lan-2" "lan2" "tx rx link"
+ 	ucidef_set_led_netdev "lan3" "LAN3" "green:lan-3" "lan3" "tx rx link"
+ 	;;
++tplink,archer-ax23-v2)
++	ucidef_set_led_netdev "lan" "LAN" "white:lan" "br-lan"
++	ucidef_set_led_netdev "wan" "WAN" "white:wan" "wan"
++	;;
+ tplink,archer-ax55-v1)
+ 	ucidef_set_led_netdev "lan" "LAN" "green:lan" "br-lan"
+ 	ucidef_set_led_netdev "wan" "WAN" "green:wan-online" "wan"
