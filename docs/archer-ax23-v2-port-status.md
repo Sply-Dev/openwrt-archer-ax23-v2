@@ -55,6 +55,16 @@ Snapshot date: 2026-10-17. Current post-snapshot update: 2026-11-11.
 > patches have not been incorporated or tested. The historical audit
 > below still describes the 2026-10-17 implementation.
 >
+> **Post-snapshot update (2026-11-14, v0.4-2 updates):**
+> - **MAC Address Resolution:** The root cause of the U-Boot `"eth0 MAC Address from ART is not valid"`
+>   warning was diagnosed via `appsbl.bin` disassembly. Qualcomm U-Boot looks for MAC at offset `0x0`
+>   of `0:ART`, which TP-Link leaves unwritten (`0xFF`). The true factory MAC is stored in UBIFS
+>   partition `tp_data` (`/dev/mtd13`), file `default-mac` (6 binary bytes). Patches `0003` and `0004`
+>   mount `tp_data` during preinit and assign factory MAC to LAN and WAN in `02_network`.
+> - **LED Configuration:** Patch `0005` assigns netdev triggers in `01_leds` for `white:lan` (`br-lan`)
+>   and `white:wan` (`wan`). GPIO polarity is confirmed `GPIO_ACTIVE_HIGH` across all 7 LEDs.
+>   The secondary amber WAN LED remains unassigned by default matching `archer-ax55-v1` upstream practice.
+>
 ## Scope and evidence conventions
 
 Baseline reviewed:
@@ -303,7 +313,7 @@ designed to be non-persistent.
 | Boot on the physical device | **Not demonstrated** |
 | Switch / Ethernet | **Not demonstrated** (driver patches unproven on hardware) |
 | Wi-Fi 2.4 / 5 GHz | **Not demonstrated** (calibration and board data unresolved) |
-| Default network config and MAC assignment | **Not implemented** |
+| Default network config and MAC assignment | Implemented (patches 0002, 0003, 0004, 0005) `[VERIFIED]` |
 | Persistent install / `sysupgrade` / rollback | **Not implemented** |
 | Switch driver patch set | Carries v1 of an upstream series now at v5/v6 (openwrt/openwrt#19644), with third-party hardware validation on a different device of the same chip/family. Not yet updated in this tree (R19). |
 

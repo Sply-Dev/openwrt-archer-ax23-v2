@@ -1,10 +1,10 @@
 diff --git a/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network b/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network
-index 11b7d2d..668abe4 100644
 --- a/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network
 +++ b/target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network
-@@ -76,6 +76,7 @@ ipq50xx_setup_macs()
- 		[ -n "$lan_mac" ] && ucidef_set_label_macaddr "$lan_mac"
- 		;;
+@@ -56,6 +56,7 @@ ipq50xx_setup_macs()
+ 	local label_mac=""
+ 
+ 	case $board in
  	mercusys,mr80x-v2|\
 +	tplink,archer-ax23-v2|\
  	tplink,archer-ax55-v1)

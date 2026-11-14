@@ -53,12 +53,39 @@ to fetch board data (including `failed to fetch board.bin` and a QMI board-file 
 either radio is incompatible. ART offsets, calibration, association and traffic
 remain unvalidated.
 
-## 3. MAC address origin
+## 3. MAC address origin and U-Boot ART error
 
-`[OPEN]` The `tp_data` NAND partition is the leading candidate for the
-LAN/WAN MAC address source, but the exact offset has not been confirmed on
-this device. Patch `0002` adds the `02_network` LAN/WAN roles, without
-board-specific MAC assignment. The v0.2 logs predate that patch.
+**Status:** `[RESOLVED]` by binary disassembly of vendor U-Boot (`appsbl.bin`),
+live NAND extraction of `/dev/mtd13` (`tp_data`), and OpenWrt implementation (patches `0003` and `0004`).
+
+### Why U-Boot logs "eth0 MAC Address from ART is not valid"
+Disassembly of `appsbl.bin` (ARM32 / Thumb2, entry `0x4a920000`, caller at `0x4a924604`)
+shows that Qualcomm U-Boot unconditionally reads page 0 (`0x0000`) of partition `"0:ART"`
+via `ops->read_page` (`0x4a9285ac`) expecting 12 bytes (`eth0` at `+0x0`, `eth1` at `+0x6`).
+On TP-Link devices, partition `0:ART` has `0xFF` in `0x0000..0x0630` (unwritten flash).
+Validation at `0x4a924636` tests bit 0 of byte 0 (`ldrb r3, [mac]; lsls r2, r3, #31; bmi ...`),
+which tests the I/G (Individual/Group multicast) bit. For `0xFF`, bit 0 is 1, causing the branch
+to trigger the error string `"eth%d MAC Address from ART is not valid\n"` and generating a
+random MAC for Qualcomm driver initialization.
+**Conclusion:** ART does not contain the Ethernet MAC on this device. Do not create DTS nvmem cells pointing to ART for GMAC.
+
+### True Factory MAC Location
+TP-Link stores factory calibration and device data in an authenticated UBIFS volume on NAND
+partition `tp_data` (`/dev/mtd13`).
+Inside `tp_data.bin` (file `default-mac`), the factory MAC is stored as 6 raw binary bytes
+(e.g., `EC:B9:31:C6:B8:54`, OUI `EC:B9:31` registered to TP-Link Technologies Co.,Ltd.).
+
+### OpenWrt Resolution
+1. **Preinit mount (`0004`):** `target/linux/qualcommax/ipq50xx/base-files/lib/preinit/09_mount_tp_data`
+   attaches and mounts the `tp_data` volume read-only at `/tmp/tp_data`.
+2. **MAC assignment (`0003`):** `target/linux/qualcommax/ipq50xx/base-files/etc/board.d/02_network`
+   reads `/tmp/tp_data/default-mac` via `get_mac_binary "/tmp/tp_data/default-mac" 0`, assigning
+   the factory MAC to `lan` (`br-lan`) and `macaddr_add "$label_mac" 1` to `wan`.
+
+### LED Behavior (LAN & Dual-Color WAN)
+- **LAN LED (`white:lan`):** Triggered by `br-lan` activity via `01_leds` (`ucidef_set_led_netdev "lan" "LAN" "white:lan" "br-lan"`).
+- **WAN LED (`white:wan`):** Triggered by `wan` link/traffic via `01_leds`.
+- **Amber WAN LED (`led-wan-orange`, GPIO12):** Left unconfigured by default, identical to upstream OpenWrt's `tplink,archer-ax55-v1` configuration. In stock firmware, amber indicates physical carrier present without internet connectivity (DHCP lease / DNS unreachable). The Linux kernel `ledtrig-netdev` driver only triggers on physical link/carrier/traffic; application-level conditional coloring requires userspace hotplug scripts, which can be configured post-install if desired.
 
 ## 4. Trunk link speed / SGMII vs HSGMII
 

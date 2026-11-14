@@ -61,15 +61,33 @@ The patches must be applied to the matching upstream source revision specified i
 patch -p1 < /path/to/ax23v2-public/patches/0001-add-tplink-archer-ax23-v2-caldata.patch
 ```
 
-### Add the default LAN/WAN mapping
+### Add default network, factory MAC, and LED configurations
 
-The AX23 v2 exposes DSA ports named lan1, lan2, lan3, lan4, and wan. Add the
-matching board case to ipq50xx board defaults:
+Apply patches 0002 through 0005 to configure networking, factory MAC extraction, and LED triggers:
 
-    patch -p1 < /path/to/ax23v2-public/patches/0002-add-tplink-archer-ax23-v2-network-defaults.patch
+1. **Network interfaces (LAN/WAN port mapping):**
+   ```sh
+   patch -p1 < /path/to/ax23v2-public/patches/0002-add-tplink-archer-ax23-v2-network-defaults.patch
+   ```
+   Groups `lan1`-`lan4` as LAN (`br-lan`) and `wan` as WAN.
 
-This groups lan1-lan4 as LAN and wan as WAN. It does not assign interface MAC
-addresses; the AX23 v2 MAC source and offsets remain unresolved.
+2. **Preinit TP-Data mount (for factory MAC):**
+   ```sh
+   patch -p1 < /path/to/ax23v2-public/patches/0004-add-tplink-archer-ax23-v2-tp-data-mount.patch
+   ```
+   Mounts the `tp_data` UBIFS NAND volume (`/dev/mtd13`) read-only at `/tmp/tp_data` during preinit.
+
+3. **Factory MAC assignment:**
+   ```sh
+   patch -p1 < /path/to/ax23v2-public/patches/0003-add-tplink-archer-ax23-v2-label-mac.patch
+   ```
+   Reads the 6-byte binary factory MAC from `/tmp/tp_data/default-mac` in `ipq50xx_setup_macs()`, assigning base MAC to `lan` and `base + 1` to `wan`.
+
+4. **LED network activity triggers:**
+   ```sh
+   patch -p1 < /path/to/ax23v2-public/patches/0005-add-tplink-archer-ax23-v2-led-defaults.patch
+   ```
+   Configures `white:lan` to trigger on `br-lan` and `white:wan` on `wan` via `01_leds`.
 
 ### Add the device definition
 
