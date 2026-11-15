@@ -1,6 +1,6 @@
 # Build instructions
 
-These instructions describe how to reproduce the OpenWrt build for the TP-Link Archer AX23 v2. They cover **building the firmware images, not flashing them**. See `TESTING.md` for the current hardware-validation status. The v0.2 initramfs booted from RAM via U-Boot/TFTP on 2026-11-10. The v0.3 test image has been built, with no v0.3 hardware result documented yet.
+These instructions describe how to reproduce the OpenWrt build for the TP-Link Archer AX23 v2. They cover **building the firmware images, not flashing them**. See `TESTING.md` for the current hardware-validation status. The port has been validated on physical hardware through v0.4-3 using initramfs booted from RAM via U-Boot/TFTP.
 
 ## Prerequisites
 
@@ -77,6 +77,9 @@ Apply patches 0002 through 0005 to configure networking, factory MAC extraction,
    ```
    Mounts the `tp_data` UBIFS NAND volume (`/dev/mtd13`) read-only at `/tmp/tp_data` during preinit.
 
+   > [!IMPORTANT]
+   > Ensure that patch tools or manual edits do not leave `.orig` or backup files in `target/linux/qualcommax/ipq50xx/base-files/lib/preinit/`. OpenWrt's preinit loader sources all files in `/lib/preinit/*` alphabetically, and leftover `.orig` files will silently redefine functions and override the intended board definitions.
+
 3. **Factory MAC assignment:**
    ```sh
    patch -p1 < /path/to/ax23v2-public/patches/0003-add-tplink-archer-ax23-v2-label-mac.patch
@@ -135,7 +138,7 @@ For an initramfs image intended for non-persistent testing, also enable:
 CONFIG_TARGET_ROOTFS_INITRAMFS=y
 ```
 
-**The v0.2 initramfs was booted from RAM on physical hardware.** See `TESTING.md` for the result and remaining validation.
+**Hardware validation through v0.4-3 was conducted using the initramfs image booted from RAM.** See `TESTING.md` for the full test results and remaining items.
 
 ## 4. Build
 
@@ -169,17 +172,17 @@ openwrt-qualcommax-ipq50xx-tplink_archer-ax23-v2.manifest
 
 **Generating an image does not mean that it is safe to flash.**
 
-The v0.2 initramfs image booted non-persistently on a physical AX23 v2. No persistent image or v0.3 hardware result is documented.
+The port has been validated in hardware through v0.4-3 via non-persistent initramfs RAM boots (loaded via U-Boot/TFTP). Persistent NAND installation has not been validated.
 
 - The `squashfs-factory.ubi` and `squashfs-sysupgrade.bin` images are **not authorized for flashing**.
-- Do not write any generated image to NAND or attempt a persistent installation.
-- U-Boot console access and TFTP loading were demonstrated with the v0.2 initramfs. Further testing should identify the exact image revision and record the observed link and traffic behavior.
-- The documented v0.2 boot loaded initramfs into RAM; it did not validate NAND installation.
+- Do not write any generated image to NAND or attempt a persistent installation. Dual-boot A/B partition switching (`tp_boot_idx`) is not yet implemented or tested in `platform.sh`.
+- Always verify hardware behavior using RAM-only initramfs boots (`initramfs-uImage.itb`) before considering any flash operations.
 
 Read `TESTING.md` before attempting any hardware testing.
 
 ## Known build-time caveats
 
+- **Leftover patch files in preinit:** As noted above, never leave `.orig` or backup files in `base-files/lib/preinit/` as the OpenWrt preinit sequence will blindly source them.
 - The `rtl8365mb` switch driver is built directly into the kernel in the tested configuration, not as a loadable module. The applied net-next v7 series contains support for multiple chip families; the presence of RTL8367S-VB support in the driver does not establish that this specific hardware configuration has been validated.
 - `CONFIG_SERIAL_AMBA_PL011` / `_CONSOLE` were enabled in `target/linux/qualcommax/config-6.18` specifically to allow booting the initramfs image under QEMU's `virt` machine for userspace-level smoke testing. **This does not exercise the IPQ5018 SoC, RTL8367 switch, NAND, or either radio.** A QEMU boot only demonstrates that the initramfs userspace itself is not broken. See `TESTING.md`.
-- Wi-Fi compatibility was deliberately outside the v0.2 test scope. The v0.2 log records board-data loading failures for the IPQ5018 and QCN6122 radios; the cause has not been established. See `docs/KNOWN-ISSUES.md`, Section 2.
+- Wi-Fi compatibility was deliberately outside current testing scope. While caldata offsets (0x1000 for IPQ5018 and 0x26800 for QCN6122 in `0:ART`) have been confirmed bit-for-bit against hardware dumps, the current ath11k driver fails to fetch board-data with error `-12`. See `docs/KNOWN-ISSUES.md`, Section 2.
