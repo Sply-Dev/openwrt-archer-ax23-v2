@@ -7,15 +7,15 @@ This repository tracks an in-progress OpenWrt port for the **TP-Link Archer AX23
 (hardware version `v2.0`, Qualcomm IPQ5018 / 256MB RAM - not to be confused with the
 AX23 v1, which is MediaTek MT7621-based and already officially supported by OpenWrt).
 
-> **Status (2026-11-14):** v0.4-2-test released. The port boots from RAM via U-Boot/TFTP,
-> `br-lan` membership and LAN-to-LAN forwarding were confirmed on physical hardware by a
-> community tester (v0.3). LED polarity (all 7 LEDs, `GPIO_ACTIVE_HIGH`) was confirmed on
-> physical hardware (v0.4). Factory MAC address (read from `tp_data/default-mac`) and
-> LAN/WAN `netdev` LED triggers are implemented in v0.4-2 and awaiting hardware validation.
-> See [`docs/TESTING.md`](docs/TESTING.md) for the full test log.
+> **Status (2026-11-15): v0.4-3-test validated on physical hardware.** The port boots
+> from RAM via U-Boot/TFTP. The factory MAC address is now automatically read from
+> `tp_data/default-mac` during preinit and correctly assigned to `br-lan` and `wan`
+> (matching the router label). LAN and WAN `netdev` LED triggers have been confirmed
+> working on physical hardware. Direct WAN external connectivity has been verified
+> from the router. See [`docs/TESTING.md`](docs/TESTING.md) for the full test log.
 >
-> Persistent installation and `sysupgrade` are not validated. Wi-Fi radio operation is
-> unvalidated. A/B boot handling for this board is not implemented.
+> Persistent installation to NAND flash and `sysupgrade` are not validated. LAN client
+> routing/NAT, Wi-Fi radio operation, and A/B boot handling remain unvalidated.
 
 ## Why this exists
 
@@ -74,12 +74,12 @@ vendor-supplied kernel module.
 
 | Component | Status |
 |---|---|
-| Boot | Boots via U-Boot/TFTP to an OpenWrt shell. Confirmed on physical hardware through v0.4. v0.4-2-test compiled clean (2026-11-14); hardware validation of v0.4-2 pending. Persistent installation and `sysupgrade` remain unvalidated |
-| Ethernet switch (RTL8367 family D) | DSA ports `wan` and `lan1`-`lan4` operational. HSGMII 2.5 Gbit/s CPU trunk confirmed from four independent sources (U-Boot log, stock DTB, 312.5 MHz UNIPHY clock measurement on live hardware, community tester UART log). `br-lan` membership and LAN-to-LAN forwarding confirmed on physical hardware (v0.3). LAN-to-WAN routing and NAT not yet validated |
-| Default network roles | Patches `0002`-`0005` implement `lan1`-`lan4` as LAN, `wan` as WAN, factory MAC from `tp_data/default-mac`, and `netdev` LED triggers. MAC and LED trigger changes are in v0.4-2 awaiting hardware validation |
+| Boot | Confirmed on physical hardware through v0.4-3 via U-Boot/TFTP (RAM boot only). Persistent installation to flash and `sysupgrade` remain unvalidated |
+| Ethernet switch (RTL8367 family D) | Switch detected and initialized successfully. CPU link established at 2.5 Gbps (HSGMII trunk confirmed from four independent sources). `br-lan` membership and LAN-to-LAN forwarding confirmed on physical hardware (v0.3). Direct WAN external connectivity confirmed on physical hardware through successful external ping tests from the router (v0.4-2 / v0.4-3). LAN client routing and NAT forwarding validation remains pending |
+| Default network roles | Factory MAC retrieval and network interface assignment implemented and verified on physical hardware (v0.4-3). Following the preinit mount fix, `tp_data` is automatically mounted and the factory MAC from `default-mac` is correctly assigned to `br-lan` and `wan` (MAC+1), matching the router label |
 | 2.4 GHz and 5 GHz Wi-Fi | Board-data loading fails with error `-12` in current builds; root cause unknown. Radio operation is unvalidated |
-| LEDs / buttons | All 7 LED nodes confirmed `GPIO_ACTIVE_HIGH` from live OEM device tree. LED polarity confirmed working on physical hardware (v0.4). LAN and WAN `netdev` triggers added in v0.4-2 (awaiting hardware test). Amber WAN LED logic (OEM `ledctrl` daemon) is a known limitation - not implemented |
-| MAC address assignment | Resolved. U-Boot confirmed (via binary analysis of `appsbl.bin`) to never write a MAC into `0:ART` on this platform - that region is erased flash (`0xFF`). Factory MAC is in `tp_data/default-mac`; patches `0003`+`0004` read from there, following the same pattern as `archer-ax55-v1` and `mercusys,mr80x-v2` |
+| LEDs / buttons | All 7 LED nodes confirmed `GPIO_ACTIVE_HIGH` from live OEM device tree. LAN and WAN `netdev` link/activity triggers confirmed working on physical hardware (v0.4-2). Amber WAN LED connectivity logic (OEM `ledctrl` daemon) is a known limitation - not implemented |
+| MAC address assignment | Resolved and verified on physical hardware (v0.4-3). U-Boot leaves ART MAC fields as erased flash (`0xFF`). Factory MAC resides in `tp_data/default-mac`; preinit script mounts `tp_data` automatically at boot, correctly populating `br-lan` and `wan` without manual intervention |
 
 The OEM running configuration uses a forced speed of 2500, and a 312.5 MHz
 UNIPHY/GMAC clock was measured on stock hardware. Its DTB also contains
