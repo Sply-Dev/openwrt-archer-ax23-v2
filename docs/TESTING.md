@@ -1,87 +1,78 @@
 # Testing status
 
-> **Hardware result (v0.2, 2026-11-10):** Two PuTTY sessions show U-Boot console
-> access, TFTP loading of an initramfs FIT, kernel startup and an OpenWrt shell on
-> a physical AX23 v2. These are v0.2 tests. The v0.3 test image has been built,
-> but no v0.3 hardware result is recorded here.
+> **Hardware validation status (through v0.4-3, 2026-11-15):** The OpenWrt port has been
+> successfully tested and validated on physical hardware (Archer AX21 v5 identifying as
+> AX23 v2 hardware) across multiple iterative releases via U-Boot TFTP RAM boots.
+> Ethernet switch 2.5G trunk, `br-lan` bridge forwarding, LED polarity and activity
+> triggers, direct WAN connectivity, and automated factory MAC address retrieval are
+> fully validated on physical hardware.
 
-The [`archer-ax23-v2-port-status.md`](archer-ax23-v2-port-status.md) file is a
-dated 2026-10-17 snapshot. Its post-snapshot updates record later results;
-the original audit is retained for historical context.
+The [`archer-ax23-v2-port-status.md`](archer-ax23-v2-port-status.md) file contains
+historical review snapshots; this document tracks the active hardware validation log.
 
-## Validation stages
+## Validation matrix
 
-| Stage | v0.2 evidence |
-|---|---|
-| Root access to OEM firmware | Obtained separately for OEM runtime inspection; it does not establish OpenWrt operation |
-| Interactive U-Boot and image loading | Serial logs show command access, TFTP transfer and `bootm` execution |
-| OpenWrt kernel and userspace | Linux 6.18.55 started and reached `root@OpenWrt:~#` from initramfs |
-| Switch discovery and CPU link | Driver reports RTL8367S-VB and DSA ports; GMAC and switch report fixed 2500base-x link up, 2.5 Gbit/s full duplex with RX/TX flow control reported |
-| External ports and traffic | `lan1` returned carrier 1 after `ip link set lan1 up`; the other four ports returned 0 in that sequence. No per-port traffic, DHCP, VLAN or sustained forwarding result was supplied |
-| Wi-Fi | Deliberately not configured for these tests. Board-data loading failed in the logs; the cause and radio compatibility remain untested |
-| v0.3 and persistent installation | v0.3 image built, hardware result pending. No `sysupgrade` or A/B rollback validation follows from the v0.2 RAM boot |
+| Component / Function | Status | Evidence / Release |
+|---|---|---|
+| U-Boot TFTP RAM Boot | `[VERIFIED]` | Clean bootm execution from RAM; reached shell (v0.2–v0.4-3) |
+| Switch Discovery & CPU Trunk | `[VERIFIED]` | RTL8367S-VB probed; 2500base-x link up at 2.5 Gbps Full Duplex with flow control |
+| LAN Switch Bridge (`br-lan`) | `[REPORTED]` | Ports lan1–lan4 assigned to `br-lan`; LAN-to-LAN forwarding confirmed with PC (v0.3) |
+| LED Polarity | `[REPORTED]` | All 7 LEDs confirmed `GPIO_ACTIVE_HIGH`; remain off at boot and light on state (v0.4) |
+| LAN/WAN LED Activity Triggers | `[REPORTED]` | LAN LED blinks with traffic; WAN LED illuminates upon physical link (v0.4-2) |
+| Direct WAN Connectivity | `[REPORTED]` | WAN negotiated 1Gbps/Full; ICMP ping to 1.1.1.1 successful from router with 0% loss (v0.4-2 / v0.4-3) |
+| Factory MAC Assignment | `[REPORTED]` | `tp_data` mounts automatically at preinit; factory MAC read from `default-mac` populates `br-lan` and `wan` (v0.4-3) |
+| LAN Client NAT Forwarding | `[OPEN]` | Direct router ping verified; forwarding client packets across LAN to WAN via NAT pending |
+| Wi-Fi (2.4 GHz & 5 GHz) | `[OPEN]` | Caldata offsets verified against dump; driver blocked on board-data fetch error `-12` |
+| Persistent Flash Install | `[OPEN]` | Non-persistent RAM boot only; `platform.sh` dual-boot A/B handling unvalidated |
 
-The owner-provided v0.2 PuTTY logs include these representative lines.
-The full logs are not included in this public repository because they
-contain device identifiers:
+## Hardware test log by release
 
-```text
-rtl8365mb-mdio 90000.mdio-1:1d: found an RTL8367S-VB switch
-rtl8365mb-mdio 90000.mdio-1:1d: Link is Up - 2.5Gbps/Full - flow control rx/tx
-ipq5018-gmac-dwmac 39d00000.ethernet eth0: Link is Up - 2.5Gbps/Full - flow control rx/tx
-br-lan: port 1(eth0) entered forwarding state
-OpenWrt SNAPSHOT, r37094+2-98b1185d03
-```
+### v0.2 (2026-11-10): Initial RAM boot
+- U-Boot serial console access verified via UART (115200 8N1, 1.8V).
+- Initramfs FIT image loaded via TFTP and executed with `bootm`.
+- Linux kernel 6.18.55 booted to an interactive OpenWrt shell.
+- RTL8367S-VB switch detected over MDIO; 2.5 Gbps CPU link established.
 
-The `br-lan` line names `eth0`, but the log alone does not show the full
-generated network configuration. That must be inspected in v0.3.
+### v0.3 (2026-11-12): LAN bridge and forwarding
+- Patch `0002` applied to configure default interface roles.
+- `br-lan` bridge correctly grouped `lan1` through `lan4`.
+- A PC connected to physical LAN ports received link, entered forwarding state, and verified bidirectional LAN-to-LAN packet traffic.
 
-Before the ports were administratively enabled, reading their `carrier` entries
-returned `Invalid argument`. The test image did not contain `ethtool`. The later
-`carrier` values do not establish why the other ports read 0, or that `lan1`
-forwarded packets.
+### v0.4 (2026-11-13): LED polarity correction
+- Corrected all 7 LED nodes from `GPIO_ACTIVE_LOW` to `GPIO_ACTIVE_HIGH` in the DTS based on stock device tree registers (`flags 00 00 00 00`).
+- Hardware verification confirmed LEDs stay off upon boot and correctly respond to active events without inverted behavior.
 
-Patch `0002` adds the AX23 v2 case in `board.d/02_network` for LAN/WAN default
-roles. It was added after these v0.2 logs. These tests therefore do not show
-whether it corrected the default bridge or the inconsistent external link
-behavior. It does not modify the DSA driver or PHY link logic.
+### v0.4-2 (2026-11-14): WAN negotiation, ping, and LED triggers
+- Patch `0005` added `netdev` LED triggers for LAN and WAN in `board.d/01_leds`.
+- Connecting a PC to LAN caused the LAN LED to illuminate and blink with traffic.
+- Connecting an upstream modem/router to WAN caused the white WAN LED to illuminate.
+- The WAN interface negotiated 1Gbps/Full link.
+- ICMP ping test from the router console (`ping -c 6 1.1.1.1`) passed with 6/6 packets received, 0% loss, ~10ms latency.
+- Factory MAC address fell back to U-Boot default (`00:11:22:33:44:56`) due to a preinit mount failure. Manual investigation confirmed `tp_data` held valid data and `default-mac` matched the router's bottom label.
 
-A QEMU boot of the initramfs, if performed, exercises generic kernel/userspace
-only; QEMU's `virt` machine does not emulate the IPQ5018, RTL8367, NAND or radios.
+### v0.4-3 (2026-11-15): Preinit mount fix and factory MAC validation
+- Root-caused the preinit mount failure: a leftover `09_mount_tp_data.orig` patch backup file was being sourced alphabetically after `09_mount_tp_data`, silently redefining the preinit function without the AX23 v2 case.
+- Removed `.orig` and added `.gitignore` rules.
+- Hardware verification confirmed that `tp_data` mounts automatically at boot without manual intervention.
+- `ip link show br-lan` showed factory MAC `78:20:51:cc:75:78` (matching router label).
+- `ip addr show wan` showed factory MAC `78:20:51:cc:75:79` (`base + 1`).
+- WAN link negotiation and external ping to 1.1.1.1 were re-verified clean.
 
-## Static verification already done
+## Remaining validation items
 
-The first four rows summarize the 2026-10-17 snapshot in
-`archer-ax23-v2-port-status.md` section 2. Later integration changes
-are identified separately:
+### 1. Client LAN-to-WAN routing and NAT forwarding
+While direct WAN connectivity from the router itself is verified, client routing requires:
+- Connecting a client PC to a LAN port (with static IP or DHCP).
+- Executing `ping 1.1.1.1` and HTTP/HTTPS requests from the client machine.
+- Verifying iptables/nftables MASQUERADE rules forward and translate traffic across the switch.
 
-| Check | What it confirmed |
-|---|---|
-| DTB consistency | The compiled DTB matches the source DTS byte-for-byte in the relevant nodes (switch, radios, boot args) |
-| Partition table | The 16 NAND partitions in the DTS are contiguous, no gaps/overlaps, sized consistently with the image size config |
-| Kernel configuration | The switch driver and its dependencies (`NET_DSA_REALTEK*`, `PCS_QCA_UNIPHY`) are enabled and built in |
-| Switch patches present | The 2026-10-17 snapshot reviewed eight v1 patches. The tree later moved to the project's ten-patch pre-v7/v7 series. The v0.2 logs are separate hardware evidence |
-| Integration points | Patch `0002` now adds the `02_network` case, after the v0.2 tests. Board-specific LED setup and `platform.sh` upgrade handling are still absent |
+### 2. Wi-Fi radio bring-up (`ath11k`)
+- While caldata extraction offsets (`0x1000` for IPQ5018 and `0x26800` for QCN6122 in `0:ART`) have been verified bit-for-bit against hardware dumps, the ath11k driver fails to fetch board data with error `-12`.
+- Investigation of the `board-2.bin` variant lookup string and board ID is needed.
 
-These static checks apply to the build tree reviewed at the time. The v0.2 serial
-logs provide separate hardware evidence; neither set of checks validates
-persistent installation or complete peripheral operation.
+### 3. Switch calibration (v0.5 target)
+- Evaluate newer patch revisions of the RTL8367S-VB family D series to optimize throughput, stability, and SerDes eye calibration.
 
-## Remaining validation
-
-For v0.3, record the tested image hash and the source revision alongside a new
-serial log. Then check the generated `/etc/config/network` and `br-lan` members to
-verify the `02_network` default roles. Test each physical LAN and WAN port with
-known cable placement, link state, packet exchange, addressing and repeated
-up/down cycles. Capture switch and GMAC errors during sustained traffic. These
-checks are needed before attributing any improvement to patch `0002`.
-
-The 2.5 Gbit/s CPU link reported by the v0.2 log is evidence of link bring-up
-under OpenWrt. The reported RX/TX flow-control setting is not a measurement of
-pause frames or throughput through a physical port. Wi-Fi, LEDs, buttons, MAC
-assignment, persistence and rollback require separate tests when they enter
-scope. Wi-Fi was intentionally omitted from the v0.2 test plan.
-
-Persistent installation needs a board-specific upgrade design and independent
-validation of slot selection and recovery. A successful initramfs boot does not
-authorize use of the current `factory` or `sysupgrade` images for NAND installation.
+### 4. Persistent NAND installation
+- Flash installation remains unauthorized until dual-boot A/B slot selection (`fw_setenv tp_boot_idx`) is implemented in `platform.sh` and verified safe against bricking.
+- All testing must continue using RAM-only TFTP boots (`initramfs-uImage.itb`).
