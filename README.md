@@ -19,7 +19,7 @@ AX23 v1, which is MediaTek MT7621-based and already officially supported by Open
 
 
 <div align="center">
-  <img src="docs/img/IMG_20250218_223854_762.jpg" alt="Archer AX23 v2.0 board overview" width="750">
+  <img src="docs/img/IMG_20250218_223854_762.jpg" alt="Archer AX23 v2.0 board overview" width="700">
   <p><strong>Archer AX23 v2.0 PCB overview</strong> - Photo credit: <a href="https://forum.openwrt.org/u/nihilokrat">Nihilokrat</a> via OpenWrt forum thread <a href="https://forum.openwrt.org/t/adding-openwrt-support-for-tp-link-archer-ax23v2/225168">t/225168</a></p>
 </div>
 
