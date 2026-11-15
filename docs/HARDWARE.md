@@ -45,16 +45,16 @@ hardware is presumed identical across these regions, but this has not been confi
 
 ## Ethernet switch
 
-`[SOURCE]`/`[VERIFIED]`
+`[SOURCE]`/`[VERIFIED]`/`[REPORTED]`
 
 | Component | Detail |
 |---|---|
 | Chip | Realtek RTL8367S-VB |
-| Chip ID | `0x6642`, chip revision `0x0010`. `[VERIFIED]` by two independent static-analysis paths against the vendor `qca-ssdk.ko`: cross-reference with OpenWrt's legacy `rtl8367b.c` driver (`chip_num=0x6642` / `chip_ver=0x0010` maps directly to `RTL8367B_CHIP_RTL8367S_VB`), and the chip detection routine's own internal structure, which tests a separate, earlier ID set (`0x0276`, `0x0597`, `0x6367`, belonging to the unrelated RTL8367C family) before reaching the `0x6642` check that this device actually resolves to. See `docs/RESEARCH.md` for the detailed derivation. This confirms the chip as RTL8367S-VB, "family D" in Realtek's own driver naming. **Still not confirmed by reading the register on a physical unit**, see `docs/KNOWN-ISSUES.md` §1. |
+| Chip ID | `0x6642`, chip revision `0x0010`. `[VERIFIED]` by static analysis of vendor `qca-ssdk.ko` and runtime probe by the `rtl8365mb` driver over MDIO (`rtl8365mb-mdio: found an RTL8367S-VB switch`). This confirms the chip as RTL8367S-VB, "family D" in Realtek's naming. |
 | Reset GPIO | GPIO39, read from the live OEM device tree; GPIO33 is the 2.4 GHz LED |
-| Uplink | GMAC1 → UNIPHY0 → switch CPU port 6. HSGMII 2.5G is configured and reported up in the v0.2 OpenWrt log; external-port traffic remains to be validated |
-| LAN ports | 1, 2, 3, 4 |
-| WAN port | 0 |
+| Uplink | GMAC1 → UNIPHY0 → switch CPU port 6. Configured as HSGMII 2.5G (`2500base-x`) with flow control. Verified up at 2.5 Gbps in OpenWrt boots. |
+| LAN ports | 1, 2, 3, 4 (`[REPORTED]` `br-lan` membership and LAN-to-LAN forwarding verified in v0.3) |
+| WAN port | 0 (`[REPORTED]` 1 Gbps physical link negotiation and external ping verified in v0.4-2 / v0.4-3) |
 | CPU port | 6 (tagged, `6t` in OEM `/etc/config/switch`) |
 
 `[SOURCE]` From the OEM firmware's own switch config (`/etc/config/switch`) and
@@ -75,16 +75,14 @@ clocks were measured at 312.5 MHz. The OEM DTB says
 `port@1` `forced-speed = <0x9c4>` (2500) and
 `forced-duplex = <1>`. The U-Boot source also configures
 `MODE_EXT_HSGMII` / `PORT_SPEED_2500M`. The current OpenWrt DTS uses
-`2500base-x` with speed 2500 and `pause`. The v0.2 OpenWrt log reports
-the CPU link up at 2.5 Gbit/s full duplex with RX/TX flow control
-reported. These observations support HSGMII 2.5G; they do not prove
-external-port forwarding or actual pause-frame exchange. See
-`RESEARCH.md`, `DEVICE-TREE.md` and `KNOWN-ISSUES.md` §4.
+`2500base-x` with speed 2500 and `pause`. OpenWrt boot logs report
+the CPU link up at 2.5 Gbit/s full duplex with RX/TX flow control.
 
-**Validation limit:** the v0.2 OpenWrt driver detected the switch and
-reported a 2.5 Gbit/s CPU link. Reliable packet forwarding through
-external ports remains to be demonstrated; see `RESEARCH.md` and
-`KNOWN-ISSUES.md` §4.
+**Hardware validation:** Physical testing through v0.4-3 confirmed:
+- Switch detection and CPU link up at 2.5 Gbps / Full.
+- LAN ports 1–4 operational under `br-lan` bridge with LAN-to-LAN packet forwarding (v0.3).
+- WAN port negotiating at 1Gbps/Full with successful external ICMP ping from the router (v0.4-2 / v0.4-3).
+- Client LAN-to-WAN NAT forwarding validation remains pending.
 
 ## Radios
 
@@ -104,9 +102,7 @@ CA/default/lib/firmware/IPQ5018/WIFI_FW/qcn6122/bdwlan.b60   (128KB, 5GHz)
 ```
 
 The OEM `wifi_fw_mount` init script symlinks this `WIFI_FW/` directory to
-`/lib/firmware/IPQ5018/` at runtime, which means Wi-Fi calibration does not strictly
-depend on the `ART` partition being intact, relevant for units where `ART` may have
-been erased (e.g. some ISP-branded units, per community reports).
+`/lib/firmware/IPQ5018/` at runtime. Offsets in the `ART` NAND partition (`0x1000` for 2.4 GHz and `0x26800` for 5 GHz) were confirmed bit-for-bit against hardware partition dumps. Runtime radio bring-up is currently blocked by ath11k failing to fetch board data (error `-12`).
 
 ## UART
 
@@ -125,32 +121,30 @@ been erased (e.g. some ISP-branded units, per community reports).
 
 ## GPIO map
 
-`[SOURCE]` Extracted from the OEM U-Boot device tree blob.
+`[SOURCE]`/`[VERIFIED]` Extracted from OEM device tree and verified on physical hardware.
 
-| GPIO | Function |
-|---|---|
-| 10 | Power LED |
-| 11 | 5GHz LED |
-| 12 | WAN LED (orange) |
-| 13 | WAN LED |
-| 14 | Reset button |
-| 22 | WPS LED |
-| 28 | UART RX |
-| 29 | UART TX |
-| 32 | LAN LED |
-| 33 | 2.4 GHz LED |
-| 39 | Switch reset, read directly from the live OEM device tree |
-| 36 | MDC |
-| 37 | MDIO |
+| GPIO | Function | Polarity |
+|---|---|---|
+| 10 | Power LED | `GPIO_ACTIVE_HIGH` |
+| 11 | 5GHz LED | `GPIO_ACTIVE_HIGH` |
+| 12 | WAN LED (orange) | `GPIO_ACTIVE_HIGH` |
+| 13 | WAN LED (green/white) | `GPIO_ACTIVE_HIGH` |
+| 14 | Reset button | Active-low |
+| 22 | WPS LED | `GPIO_ACTIVE_HIGH` |
+| 28 | UART RX | N/A |
+| 29 | UART TX | N/A |
+| 32 | LAN LED | `GPIO_ACTIVE_HIGH` |
+| 33 | 2.4 GHz LED | `GPIO_ACTIVE_HIGH` |
+| 39 | Switch reset | Active-low |
+| 36 | MDC | N/A |
+| 37 | MDIO | N/A |
 
-`[OPEN]` LED polarity (active-high vs active-low) has not been confirmed. The
-physical LAN1–4 port-to-silicon mapping is also unconfirmed, see
-`docs/KNOWN-ISSUES.md` §5.
+`[VERIFIED]`/`[REPORTED]` All 7 LED nodes were confirmed `GPIO_ACTIVE_HIGH` from the live OEM device tree and physical testing (v0.4). LAN and WAN `netdev` link/activity triggers were confirmed working in v0.4-2. Physical LAN1–4 port mapping was confirmed working under `br-lan` in v0.3.
 
 ## NAND partition layout
 
 `[SOURCE]`/`[VERIFIED]` Confirmed against the 1.1.2 rootfs and cross-checked by
-community member `vram` over UART.
+community members over UART.
 
 | Partition | Offset | Size | Notes |
 |---|---|---|---|
@@ -163,11 +157,11 @@ community member `vram` over UART.
 | CDT | `0x2c0000` | Not specified | |
 | APPSBLENV | `0x300000` | Not specified | |
 | APPSBL | `0x380000` | 1.25M | |
-| ART | `0x4c0000` | 1M | May be erased on some ISP-branded units, see Radios above |
+| ART | `0x4c0000` | 1M | MAC fields are erased `0xFF` by factory design; caldata at `0x1000` and `0x26800` |
 | TRAINING | `0x5c0000` | Not specified | |
 | rootfs | `0x640000` | 53M | Image A |
 | rootfs_1 | `0x3bc0000` | 53M | Image B |
-| tp_data | `0x7140000` | 8.25M | Candidate source for MAC addresses, see `docs/KNOWN-ISSUES.md` §3 |
+| tp_data | `0x7140000` | 8.25M | `[VERIFIED]` UBIFS volume containing `default-mac`, mounted during preinit (v0.4-3) |
 | radio | `0x7980000` | 4.25M | |
 | data | `0x7dc0000` | 512K | |
 
@@ -185,11 +179,10 @@ BOOTCONFIG/BOOTCONFIG1 left read-only.
 ## Credits
 
 Hardware identification in this document combines static analysis of OEM firmware
-with physical confirmation by **vram**, a community member with UART access to a
-physical unit, via OpenWrt forum thread `t/249493`. Items marked `[REPORTED]` above reflect that collaboration. Subsequent
-OEM runtime measurements and the v0.2 OpenWrt serial logs are described
-separately in the relevant sections; each conclusion retains its own
-validation limit.
+with physical confirmation by **vram** and **Veraxis**, community members with UART
+access to physical units, via OpenWrt forum threads `t/249493` and `t/254876`. Items
+marked `[REPORTED]` above reflect that collaboration. Subsequent OEM runtime measurements
+and OpenWrt serial logs are described in the relevant sections.
 
 The rtl8365mb switch driver patches referenced throughout this document were
 not written by this project, see [CREDITS.md](CREDITS.md) for their authors.
