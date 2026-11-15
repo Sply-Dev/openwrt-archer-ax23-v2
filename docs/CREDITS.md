@@ -68,6 +68,8 @@ per the kernel tree they patch; see each patch file for specifics.
 
 ## Hardware access and research credited elsewhere
 
+- **Nihilokrat** (OpenWrt forum) - PCB and hardware teardown photographs,
+  credited in [`README.md`](../README.md). See OpenWrt forum thread `t/225168`.
 - **vram** (OpenWrt forum) - UART access and OEM U-Boot DTB extraction,
   credited in [`HARDWARE.md`](HARDWARE.md) and referenced from the DTS header. See
   OpenWrt forum thread `t/249493`.
