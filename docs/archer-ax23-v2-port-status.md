@@ -65,6 +65,22 @@ Snapshot date: 2026-10-17. Current post-snapshot update: 2026-11-11.
 >   and `white:wan` (`wan`). GPIO polarity is confirmed `GPIO_ACTIVE_HIGH` across all 7 LEDs.
 >   The secondary amber WAN LED remains unassigned by default matching `archer-ax55-v1` upstream practice.
 >
+> **Post-snapshot update (2026-11-15, v0.4-3 hardware validation):**
+> - **Preinit Mount & Factory MAC Verification:** Testing of v0.4-2 revealed that `/tmp/tp_data/`
+>   failed to mount during preinit because an orphaned patch backup file (`09_mount_tp_data.orig`)
+>   was loaded alphabetically by `/etc/preinit`, silently redefining `preinit_mount_tp_data`
+>   without the AX23 v2 board case. In v0.4-3, `.orig` was deleted and build caches cleared.
+>   Physical hardware testing by Veraxis confirmed `tp_data` mounts automatically during preinit:
+>   `br-lan` was assigned factory MAC `78:20:51:cc:75:78` (matching the unit label) and `wan` was
+>   assigned `78:20:51:cc:75:79` (`base + 1`).
+> - **Switch & WAN Connectivity:** Hardware testing confirmed external WAN port link negotiation
+>   at 1Gbps/Full and successful external ICMP ping from the router (`ping -c 5 1.1.1.1`, 0% loss, ~10ms).
+>   LAN-to-LAN forwarding across `br-lan` ports 1-4 was confirmed in v0.3. Client LAN-to-WAN routing
+>   and NAT forwarding validation remains pending.
+> - **Milestone Progress:** Milestones M1 (RAM boot) and M2 (switch and CPU trunk) are achieved on
+>   physical hardware. M3 (Wi-Fi bring-up) remains blocked on ath11k board-data error `-12`.
+>   M4 (flash persistence) remains open pending `platform.sh` implementation.
+>   
 ## Scope and evidence conventions
 
 Baseline reviewed:
@@ -310,12 +326,12 @@ designed to be non-persistent.
 |---|---|
 | Build integration and image generation | Done; builds and produces 4 images (`[VERIFIED]`, S1-S4) |
 | DTS to DTB consistency | Statically consistent (`[VERIFIED]`, S5-S6) |
-| Boot on the physical device | **Not demonstrated** |
-| Switch / Ethernet | **Not demonstrated** (driver patches unproven on hardware) |
-| Wi-Fi 2.4 / 5 GHz | **Not demonstrated** (calibration and board data unresolved) |
-| Default network config and MAC assignment | Implemented (patches 0002, 0003, 0004, 0005) `[VERIFIED]` |
+| Boot on the physical device | Demonstrated (v0.2–v0.4-3 TFTP RAM boot) `[VERIFIED]` / `[REPORTED]` |
+| Switch / Ethernet | Demonstrated on hardware (2.5G trunk, br-lan forwarding, WAN ping; client NAT pending) `[REPORTED]` |
+| Wi-Fi 2.4 / 5 GHz | **Not demonstrated** (calibration offsets verified; board-data loading fails with error -12) `[OPEN]` |
+| Default network config and MAC assignment | Verified on physical hardware (patches 0002–0005, v0.4-3) `[VERIFIED]` / `[REPORTED]` |
 | Persistent install / `sysupgrade` / rollback | **Not implemented** |
-| Switch driver patch set | Carries v1 of an upstream series now at v5/v6 (openwrt/openwrt#19644), with third-party hardware validation on a different device of the same chip/family. Not yet updated in this tree (R19). |
+| Switch driver patch set | Carries v7 of an upstream series (openwrt/openwrt#19644), with third-party and local hardware validation. Newer revisions planned for v0.5. |
 
 The port is at the "builds and is statically consistent" stage. The single most important gap
 is that nothing has ever executed on the target hardware.
