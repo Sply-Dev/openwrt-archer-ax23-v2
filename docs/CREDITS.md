@@ -9,8 +9,21 @@ authors, so that credit lands where it belongs.
 - `target/linux/qualcommax/image/ipq50xx-ax23v2-snippet.mk` - image definition
 - `patches/0001-add-tplink-archer-ax23-v2-caldata.patch` - ath11k caldata hotplug cases for this device
 - `patches/0002-add-tplink-archer-ax23-v2-network-defaults.patch` - AX23 v2 LAN/WAN interface roles
+- `patches/0003-add-tplink-archer-ax23-v2-label-mac.patch` - factory MAC address retrieval from tp_data
+- `patches/0004-add-tplink-archer-ax23-v2-tp-data-mount.patch` - preinit mount for tp_data UBIFS volume
+- `patches/0005-add-tplink-archer-ax23-v2-led-defaults.patch` - LAN/WAN netdev trigger defaults
 - All of `docs/` - written for this repository, except where it describes or
   quotes someone else's work (credited inline and here)
+
+## Community testing and hardware validation
+
+- **Veraxis** (OpenWrt forum) - Extensive physical hardware validation on an
+  Archer AX21 v5 (US variant identifying as AX23 v2 hardware) using UART and
+  TFTP RAM boots. Confirmed initial boots (v0.2), `br-lan` switch membership and
+  LAN-to-LAN forwarding (v0.3), LED polarity and LAN/WAN `netdev` link/activity
+  triggers (v0.4/v0.4-2), direct WAN external connectivity (v0.4-2/v0.4-3), and
+  automated preinit factory MAC address reading from `tp_data/default-mac` (v0.4-3).
+  Active testing and feedback documented in OpenWrt forum thread `t/254876`.
 
 ## Carried-in third-party patches
 
