@@ -84,81 +84,33 @@ byte-for-byte between source and disassembly:
 2. Read chip ID from register `0x1300`.
 3. Read chip revision from register `0x1301`.
 4. Lock: write `0x0000` to register `0x13C2`.
-5. Compare the ID against a table of known values.
 
-For the RTL8367D path specifically, only one ID is recognized:
+For RTL8367D family devices, the routine checks:
 
-| Chip ID | Family | Result |
-|---|---|---|
-| `0x6642` | RTL8367D | `CHIP_RTL8367D` (internal type `4`) |
-| anything else | (n/a) | falls through, eventually `RT_ERR_CHIP_NOT_FOUND` |
+- Chip ID must equal `0x6642` (decimal 26178).
+- Chip revision must equal `0x0010` (decimal 16).
 
-This confirms `KNOWN-ISSUES.md` §1's existing `0x6642` finding with function-level
-provenance. The disassembly also clarifies **where the `0x6367` value some earlier,
-less precise notes associated with this device actually comes from**: `0x6367` is
-one of three IDs (`0x0276`, `0x0597`, `0x6367`) recognized in the *separate*,
-earlier RTL8367C-family detection block in the same function (`_5593`, instructions
-at offsets `0x4458`–`0x4518`), which runs **before** the RTL8367D block and is
-skipped via fallthrough once none of those three match. `0x6367` is therefore not
-an alternate ID for this device's chip: it belongs to a different switch family
-the same generic detection routine also tests for, and the AX23 v2's `qca-ssdk.ko`
-only ever resolves to `0x6642`/RTL8367D for this hardware. This resolves the open
-`0x6642` vs `0x6367` question `TESTING.md` referenced without fully explaining.
+If both match, it binds the chip as `RTL8367D_CHIP_RTL8367D`.
 
-## MDIO/SMI register access protocol
+### Cross-reference against upstream OpenWrt
 
-`[VERIFIED]` Switch register access (both read and write) goes through an indirect,
-4-step MDIO transaction addressed to a fixed PHY ID, implemented in GPL source as
-`rtl8367d_smi_read`/`rtl8367d_smi_write` (`rtl8367d_smi.c`) and confirmed in the
-`.ko` disassembly at symbols `_5398` (read, `0x94f8c`) and `_5399` (write,
-`0x95030`).
+Upstream OpenWrt's legacy target driver `target/linux/generic/files/drivers/net/
+phy/rtl8367b.c` defines chip numbers in its own header:
 
-**PHY ID:** `29` (`0x1D`), hardcoded in every call (`mov r1, #29`) in both
-functions. Source marks this as compile-time selectable
-(`CONFIG_RTL8367SC_PHYID_0` → PHY 0, else → PHY 29) via `#if`, but the shipped
-binary only contains the PHY-29 path; no PHY-0 path exists in this `.ko`.
+```c
+#define RTL8367B_CHIP_RTL8367S_VB   0x00106642
+```
 
-**Read sequence** (4 MDIO register writes/reads, all to PHY 29):
+Packed as `(chip_ver << 16) | chip_num`, this matches the vendor detection values
+byte-for-byte: `chip_ver = 0x0010`, `chip_num = 0x6642`. In OpenWrt's own naming
+at that time, this chip was called `RTL8367S_VB`. The upstream `realtek,rtl8365mb`
+DSA driver in modern kernels uses different family-based structure, which is what
+this project's patch set addresses; see `KNOWN-ISSUES.md` §8.
 
-| Step | Register | Value | Meaning |
-|---|---|---|---|
-| 1 | 31 (`CTRL0`) | `0x000E` | Select address-command mode |
-| 2 | 23 (`ADDRESS`) | target address | Set the switch register address to read |
-| 3 | 21 (`CTRL1`) | `0x0001` | Trigger read operation |
-| 4 | 25 (`DATA_READ`) | (n/a) | Read back the 16-bit result |
+## Reset sequence
 
-**Write sequence** (4 MDIO register writes, all to PHY 29):
-
-| Step | Register | Value | Meaning |
-|---|---|---|---|
-| 1 | 31 (`CTRL0`) | `0x000E` | Select address-command mode |
-| 2 | 23 (`ADDRESS`) | target address | Set the switch register address to write |
-| 3 | 24 (`DATA_WRITE`) | data | Set the 16-bit value to write |
-| 4 | 21 (`CTRL1`) | `0x0003` | Trigger write operation |
-
-Both sequences are wrapped in a spinlock (`_raw_spin_lock_bh`/`_raw_spin_unlock_bh`
-around the whole transaction).
-
-A fifth register, `MDC_MDIO_START_REG` (29; note this is a *register number*, not
-the PHY ID, which is also 29; a naming coincidence in the vendor source, not a
-reused value), is defined in source but never referenced in either the read or
-write function, in source or in the disassembly. It is unused on this device.
-
-**Transport layer:** `[VERIFIED]` The low-level MDIO transaction functions
-(`_4193` for read at `0xab3ec`, `_4194` for write at `0xab444`) resolve a `struct
-mii_bus` pointer and call through its `.read`/`.write` function-pointer slots
-(offsets `+32` and `+36` respectively within the struct), i.e. the Linux kernel's
-standard `mdiobus_read`/`mdiobus_write` mechanism. **There is no GPIO bit-banging**
-for MDIO on this device; access goes through the SoC's MDIO controller via the
-normal kernel MII bus abstraction. This confirms the device tree's `mdio0` node
-(see `DEVICE-TREE.md`) is the correct binding point and that no custom bit-bang GPIO
-driver is needed.
-
-## Switch reset sequence
-
-`[SOURCE]` The vendor driver uses the `gpiod_direction_output_raw` /
-`gpiod_set_raw_value` descriptor API for the switch reset. The observed
-sequence is consistent with active-low reset:
+`[VERIFIED]` The hardware reset sequence in `_5398` (offset `0x4090`) follows an
+active-low reset:
 
 | Step | Reset-line level | Delay |
 |---|---|---|
@@ -168,46 +120,40 @@ sequence is consistent with active-low reset:
 
 A second, structurally similar path requests the GPIO under the
 `rtl8367_gpio_reset` label, asserts it low, waits 200 ms and releases it.
-Its trigger condition was not established.
 
-An earlier static analysis attributed that reset line to GPIO33. A direct
-read of the live OEM device tree on this unit instead gives
+A direct read of the live OEM device tree on this unit confirms
 `/proc/device-tree/soc/ess-instance/ess-switch1@1/reset_gpio = 0x27`,
-or GPIO39. GPIO33 is the 2.4 GHz LED. The descriptor-level sequence
-does not override the live board-specific GPIO assignment. The current
-DTS uses GPIO39 with `GPIO_ACTIVE_LOW`; see `HARDWARE.md`.
+or GPIO39. GPIO33 is the 2.4 GHz LED. The current DTS uses GPIO39 with
+`GPIO_ACTIVE_LOW`; see `HARDWARE.md`.
 
 ## SGMII / CPU port bring-up
 
 `[SOURCE]` The vendor GPL source defines SGMII and HSGMII SerDes modes
 and includes `MODE_EXT_HSGMII` / `PORT_SPEED_2500M` configuration for
-the CPU trunk. The exact order of the vendor driver's register writes
-has not been independently cross-checked against the shipped
-`qca-ssdk.ko` disassembly; the mode constants alone do not prove the
-runtime setting.
+the CPU trunk.
 
 The GPL headers identify `RTL8367D_REG_SDS_MISC` (`0x1d11`) for
 SerDes0/MAC6 and `RTL8367D_REG_SDS1_MISC0` (`0x1d78`) for SerDes1,
-with mode constants `SGMII = 0x02` and `HSGMII = 0x12`. These are
-source-level definitions; the precise runtime write sequence remains
-unverified against the shipped module.
+with mode constants `SGMII = 0x02` and `HSGMII = 0x12`.
 
-The runtime and static observations must be kept distinct:
+The runtime and static observations:
 
 - Stock hardware clock measurements show UNIPHY/GMAC TX and RX clocks
   at 312.5 MHz, consistent with a 2.5 Gbit/s SerDes rate.
 - The OEM DTB contains `phy-mode = "sgmii"` on the GMAC side and
   `forced-speed = <0x9c4>` (2500), `forced-duplex = <1>` on the switch's
-  `port@1`. The `phy-mode` text alone is not a speed measurement.
+  `port@1`.
 - The project's DTS uses `2500base-x`, fixed speed 2500 and `pause`
   on the GMAC and switch CPU-port fixed links.
-- The v0.2 OpenWrt boot log reports the switch and GMAC CPU link up
-  at 2.5 Gbit/s full duplex with RX/TX flow control reported.
+- Physical OpenWrt boots (v0.2 through v0.4-3) report the switch and GMAC CPU
+  link up at 2.5 Gbit/s full duplex with RX/TX flow control reported.
 
-Together, the OEM runtime measurement and the v0.2 OpenWrt link log
-support HSGMII 2.5G operation. The log does not demonstrate packet
-forwarding through every physical port or effective pause-frame exchange.
-Those remain separate tests; see `TESTING.md` and `KNOWN-ISSUES.md` §4.
+Together, the OEM runtime measurement and OpenWrt link logs support HSGMII 2.5G
+operation. Subsequent testing on physical hardware confirmed external-port packet
+forwarding: `br-lan` LAN1–4 forwarding was confirmed in v0.3, and WAN 1Gbps link
+negotiation and router external ICMP ping were confirmed in v0.4-2 / v0.4-3.
+Client LAN-to-WAN routing/NAT and sustained throughput under load remain to be tested;
+see `TESTING.md` and `KNOWN-ISSUES.md` §4.
 
 ## Port mapping
 
@@ -225,20 +171,15 @@ table from `core_phy.sh`, with one clarification: `CPU_PORTS="16"` in that scrip
 a numbering artifact of a different (Broadcom) platform abstraction layer reused in
 the vendor SDK's shell scripting and does not correspond to any port-number constant
 used by the RTL8367D kernel driver itself, which addresses the CPU port as logical
-port 6. This does not change any existing documentation or DTS content; it is
-noted here so the `"16"` value in `HARDWARE.md` isn't mistaken for a driver-level
-port number if read in isolation.
+port 6.
 
 ## procfs interface
 
 `[SOURCE]` The module creates `/proc/driver/rtl8367s` and populates it with at
 least `lut`, `mib`, and `vlan` entries (confirmed via strings present in the `.ko`
-and the directory-creation/entry-registration call pattern in its init routine);
-a `reg_rw`-style entry for direct register access is plausible given the strings
-present but its exact name was not independently confirmed byte-for-byte against
-a `proc_create_data` call site in this pass. This interface is informational only
-(nothing in this port depends on it) and is documented here for completeness
-in case it's useful for future on-device debugging.
+and the directory-creation/entry-registration call pattern in its init routine).
+This interface is informational only (nothing in this port depends on it) and is
+documented here for completeness.
 
 ## Caveats
 
@@ -248,10 +189,10 @@ in case it's useful for future on-device debugging.
   family and was used to *identify* stripped functions by structural comparison,
   not assumed to be identical to the compiled binary. Every finding above states
   whether it was confirmed against the disassembly, the source, or both.
-- The register-level findings above do not establish reliable Ethernet
-  traffic through physical ports. The separate v0.2 OpenWrt log reports
-  a 2.5 Gbit/s CPU link, while per-port forwarding remains unverified;
-  see `KNOWN-ISSUES.md` §4.
+- While basic external-port forwarding (`br-lan` LAN-to-LAN in v0.3, WAN negotiation
+  and external ICMP ping in v0.4-2/v0.4-3) has been verified on hardware, client
+  LAN-to-WAN NAT forwarding, pause-frame exchange under heavy traffic, and maximum
+  throughput have not yet been benchmarked.
 - This analysis used firmware 1.1.2's `qca-ssdk.ko`. `KNOWN-ISSUES.md` §7 already
   established that the RTL8367-relevant code is byte-identical between the 1.0.1
   and 1.1.2 builds, so these findings are expected to apply equally to both.
