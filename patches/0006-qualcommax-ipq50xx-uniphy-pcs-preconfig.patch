@@ -1,0 +1,140 @@
+diff --git a/target/linux/qualcommax/files/drivers/net/ethernet/stmicro/stmmac/dwmac-ipq5018.c b/target/linux/qualcommax/files/drivers/net/ethernet/stmicro/stmmac/dwmac-ipq5018.c
+index cacc1c92e51735..05f28dfdb6932c 100644
+--- a/target/linux/qualcommax/files/drivers/net/ethernet/stmicro/stmmac/dwmac-ipq5018.c
++++ b/target/linux/qualcommax/files/drivers/net/ethernet/stmicro/stmmac/dwmac-ipq5018.c
+@@ -8,6 +8,7 @@
+ #include <linux/clk.h>
+ #include <linux/of_mdio.h>
+ #include <linux/pcs/pcs.h>
++#include <linux/pcs/pcs-qca-uniphy.h>
+ #include <linux/phy/phy.h>
+ #include <linux/platform_device.h>
+ #include <linux/reset.h>
+@@ -86,6 +87,11 @@ static int ipq5018_gmac_pcs_init(struct stmmac_priv *priv)
+ 
+ 	priv->hw->phylink_pcs = pcs;
+ 
++	/* Not fatal: phylink runs the sequence again when the netdev is opened */
++	ret = qca_uniphy_pcs_preconfig(pcs, priv->plat->phy_interface);
++	if (ret)
++		dev_warn(priv->device, "failed to preconfigure PCS: %d\n", ret);
++
+ 	return 0;
+ }
+ 
+diff --git a/target/linux/qualcommax/files/drivers/net/pcs/pcs-qca-uniphy.c b/target/linux/qualcommax/files/drivers/net/pcs/pcs-qca-uniphy.c
+index 80a10408227f26..3fe852ec2b6cb8 100644
+--- a/target/linux/qualcommax/files/drivers/net/pcs/pcs-qca-uniphy.c
++++ b/target/linux/qualcommax/files/drivers/net/pcs/pcs-qca-uniphy.c
+@@ -462,19 +462,16 @@ static bool uniphy_ch_forced(struct phylink_pcs *pcs, unsigned int neg_mode)
+ 	       !phylink_expects_phy(pcs->phylink);
+ }
+ 
+-static int qca_uniphy_pcs_config_mode(struct phylink_pcs *pcs,
+-				      unsigned int neg_mode,
+-				      phy_interface_t interface,
+-				      const unsigned long *advertising,
+-				      bool permit_pause_to_mac)
++/* force < 0 leaves the channel force bit alone */
++static int __qca_uniphy_config_mode(struct qca_uniphy_pcs *upcs,
++				    phy_interface_t interface, int force)
+ {
+-	struct qca_uniphy_pcs *upcs = to_qca_uniphy_pcs(pcs);
+ 	struct qca_uniphy *uniphy = upcs->uniphy;
+ 	u32 misc2_phy_mode, mode_ctrl, val;
+ 	int ret;
+ 
+-	dev_dbg(uniphy->dev, "Configuring PCS: chan=%d, interface=%s, neg_mode=0x%x\n",
+-		upcs->channel, phy_modes(interface), neg_mode);
++	dev_dbg(uniphy->dev, "Configuring PCS: chan=%d, interface=%s, force=%d\n",
++		upcs->channel, phy_modes(interface), force);
+ 
+ 	/* Every channel of the instance calls this with its own phylink state
+ 	 * mutex, so nothing else keeps two of them out of the sequence below.
+@@ -533,12 +530,11 @@ static int qca_uniphy_pcs_config_mode(struct phylink_pcs *pcs,
+ 	/* The XPCS modes drive the channel from the XPCS and never read the
+ 	 * force bit.
+ 	 */
+-	if (mode_ctrl != UNIPHY_XPCS_MODE) {
++	if (mode_ctrl != UNIPHY_XPCS_MODE && force >= 0) {
+ 		ret = regmap_update_bits(uniphy->regmap,
+ 					 UNIPHY_CH_CTRL(upcs->channel),
+ 					 UNIPHY_CH_FORCE_MODE,
+-					 uniphy_ch_forced(pcs, neg_mode) ?
+-					 UNIPHY_CH_FORCE_MODE : 0);
++					 force ? UNIPHY_CH_FORCE_MODE : 0);
+ 		if (ret)
+ 			return ret;
+ 	}
+@@ -666,6 +662,18 @@ err_clks:
+ 	return ret;
+ }
+ 
++static int qca_uniphy_pcs_config_mode(struct phylink_pcs *pcs,
++				      unsigned int neg_mode,
++				      phy_interface_t interface,
++				      const unsigned long *advertising,
++				      bool permit_pause_to_mac)
++{
++	struct qca_uniphy_pcs *upcs = to_qca_uniphy_pcs(pcs);
++
++	return __qca_uniphy_config_mode(upcs, interface,
++					uniphy_ch_forced(pcs, neg_mode));
++}
++
+ static int qca_uniphy_pcs_config_usxgmii(struct phylink_pcs *pcs,
+ 					 unsigned int neg_mode,
+ 					 phy_interface_t interface,
+@@ -961,6 +969,31 @@ static const struct phylink_pcs_ops qca_uniphy_pcs_ops = {
+ 	.pcs_an_restart = qca_uniphy_pcs_an_restart,
+ };
+ 
++/* Run the instance mode sequence ahead of phylink. phylink only configures the
++ * PCS when the netdev is opened, and until then the instance holds whatever
++ * the bootloader left behind. A link partner that is brought up earlier, such
++ * as a DSA switch on a fixed link, would train its receiver against that.
++ */
++int qca_uniphy_pcs_preconfig(struct phylink_pcs *pcs, phy_interface_t interface)
++{
++	struct qca_uniphy_pcs *upcs;
++
++	if (pcs->ops != &qca_uniphy_pcs_ops)
++		return -EINVAL;
++
++	upcs = to_qca_uniphy_pcs(pcs);
++
++	switch (interface) {
++	case PHY_INTERFACE_MODE_SGMII:
++	case PHY_INTERFACE_MODE_1000BASEX:
++	case PHY_INTERFACE_MODE_2500BASEX:
++		return __qca_uniphy_config_mode(upcs, interface, -1);
++	default:
++		return 0;
++	}
++}
++EXPORT_SYMBOL_GPL(qca_uniphy_pcs_preconfig);
++
+ static const struct of_device_id qca_uniphy_of_match[] = {
+ 	{ .compatible = "qualcomm,ipq5018-uniphy", .data = &ipq5018_data },
+ 	{ .compatible = "qualcomm,ipq6018-uniphy", .data = &ipq6018_data },
+diff --git a/target/linux/qualcommax/files/include/linux/pcs/pcs-qca-uniphy.h b/target/linux/qualcommax/files/include/linux/pcs/pcs-qca-uniphy.h
+index a540416a231153..24bf4de076725d 100644
+--- a/target/linux/qualcommax/files/include/linux/pcs/pcs-qca-uniphy.h
++++ b/target/linux/qualcommax/files/include/linux/pcs/pcs-qca-uniphy.h
+@@ -155,6 +155,16 @@ struct qca_uniphy {
+ 	phy_interface_t interface;
+ };
+ 
++#if IS_REACHABLE(CONFIG_PCS_QCA_UNIPHY)
++int qca_uniphy_pcs_preconfig(struct phylink_pcs *pcs, phy_interface_t interface);
++#else
++static inline int qca_uniphy_pcs_preconfig(struct phylink_pcs *pcs,
++					   phy_interface_t interface)
++{
++	return 0;
++}
++#endif
++
+ #define port_rx_clk_idx(upcs)	((upcs)->channel * 2) + 2
+ #define port_tx_clk_idx(upcs)	(((upcs)->channel * 2) + 1) + 2
+ /* The pair is adjacent, so the bulk ops can take it from the rx index */
