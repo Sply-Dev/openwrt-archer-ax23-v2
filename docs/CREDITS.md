@@ -24,6 +24,24 @@ authors, so that credit lands where it belongs.
   triggers (v0.4/v0.4-2), direct WAN external connectivity (v0.4-2/v0.4-3), and
   automated preinit factory MAC address reading from `tp_data/default-mac` (v0.4-3).
   Active testing and feedback documented in OpenWrt forum thread `t/254876`.
+  For v0.5 (2026-11-20) confirmed on physical hardware that the UNIPHY PCS
+  preconfiguration locks the EXT0/SDS0 trunk at 2.56 s, with 3/3 cold boots and 2/2
+  soft reboots clean, and that LAN-to-WAN routing with DHCP works.
+
+## Technical contributors
+
+- **Giannis (John, GitHub: `john35413`, `fitsiosjohn@gmail.com`)** - independent
+  engineering work in `john35413/openwrt-archer-ax23-v2-build`, and PR #2 (ath11k
+  low-memory support and Q6 multi-PD recovery). These patches are carried in from that
+  work and are **not this project's own work**; authorship stays with their original
+  author and the headers in the patch files record it. The PR is under review in a
+  separate draft PR and is not part of this branch.
+
+## Financial support
+
+- **Lamuaha** (OpenWrt forum: `lamuaha`) - supports the project financially through
+  GitHub Sponsors. This credit is for financial support only; it does not attribute
+  any technical contribution or hardware testing.
 
 ## Carried-in third-party patches
 
@@ -65,6 +83,13 @@ per the kernel tree they patch; see each patch file for specifics.
 > [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) §8 for what changed between revisions,
 > and §8.1-8.2 for how this series relates to the separate, already-merged
 > Johan Alvarado SerDes/PCS series.
+
+### Upstream work behind v0.5
+
+- **Johan Alvarado** (`c127dev`) - author of openwrt/openwrt#26597, the UNIPHY PCS
+  preconfiguration that patch `0006` rebases manually for this device. The original PR
+  was tested on family C hardware (MR80X v2, AX55 v1, H3C RC3000 v3); family D with
+  HSGMII 2.5G was first tested by this project.
 
 ## Hardware access and research credited elsewhere
 

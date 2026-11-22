@@ -154,9 +154,11 @@ hardware testing and forensics:
   and validated on physical hardware (v0.4-3).
 - **Physical LAN mapping:** Resolved. `br-lan` bridge membership and physical forwarding
   were confirmed working on real hardware (v0.3).
+- **Trunk lock on cold boot:** Resolved in v0.5. `[REPORTED]` by Veraxis on physical
+  hardware (2026-11-20): the EXT0/SDS0 trunk locked at 2.56 s, with 3/3 cold boots and
+  2/2 soft reboots clean after the UNIPHY PCS preconfiguration (patch `0006`).
+  See [`TESTING.md`](TESTING.md).
 
 **Remaining open items:**
-- Validation of client LAN-to-WAN routing and NAT forwarding under real traffic load.
 - Investigation of the ath11k board data fetch failure (error `-12`).
-- Switch calibration parameter tuning (planned for v0.5).
 - Persistent flash installation and dual-boot A/B handling via `platform.sh`.

@@ -7,15 +7,18 @@ This repository tracks an in-progress OpenWrt port for the **TP-Link Archer AX23
 (hardware version `v2.0`, Qualcomm IPQ5018 / 256MB RAM - not to be confused with the
 AX23 v1, which is MediaTek MT7621-based and already officially supported by OpenWrt).
 
-> **Status (2026-11-15): v0.4-3-test validated on physical hardware.** The port boots
-> from RAM via U-Boot/TFTP. The factory MAC address is now automatically read from
-> `tp_data/default-mac` during preinit and correctly assigned to `br-lan` and `wan`
-> (matching the router label). LAN and WAN `netdev` LED triggers have been confirmed
-> working on physical hardware. Direct WAN external connectivity has been verified
-> from the router. See [`docs/TESTING.md`](docs/TESTING.md) for the full test log.
+> **Status (2026-11-20): v0.5-test validated on physical hardware.** The port boots
+> from RAM via U-Boot/TFTP. The 2.5 Gbit/s HSGMII trunk between the CPU and the
+> RTL8367S-VB switch (EXT0/SDS0) now locks reliably on every boot, including cold boots
+> from power-off. v0.5 adds a UNIPHY PCS preconfiguration at GMAC probe time (patch
+> `0006`, a manual rebase of openwrt/openwrt#26597). LAN-to-WAN client routing with
+> automatic DHCP was confirmed, with a speedtest of 444.95 Mbps down / 100.35 Mbps up.
+> Test source: Veraxis, physical hardware, 2026-11-20. See
+> [`docs/TESTING.md`](docs/TESTING.md) for the full test log.
 >
-> Persistent installation to NAND flash and `sysupgrade` are not validated. LAN client
-> routing/NAT, Wi-Fi radio operation, and A/B boot handling remain unvalidated.
+> Patch `0006` is not part of this branch; it is under review in a separate draft PR.
+> Persistent installation to NAND flash and `sysupgrade` are not validated. Wi-Fi radio
+> operation (ath11k board-data error `-12`) and A/B boot handling remain unvalidated.
 
 
 <div align="center">
@@ -81,8 +84,8 @@ vendor-supplied kernel module.
 
 | Component | Status |
 |---|---|
-| Boot | Confirmed on physical hardware through v0.4-3 via U-Boot/TFTP (RAM boot only). Persistent installation to flash and `sysupgrade` remain unvalidated |
-| Ethernet switch (RTL8367 family D) | Switch detected and initialized successfully. CPU link established at 2.5 Gbps (HSGMII trunk confirmed from four independent sources). `br-lan` membership and LAN-to-LAN forwarding confirmed on physical hardware (v0.3). Direct WAN external connectivity confirmed on physical hardware through successful external ping tests from the router (v0.4-2 / v0.4-3). LAN client routing and NAT forwarding validation remains pending |
+| Boot | Confirmed on physical hardware through v0.5 via U-Boot/TFTP (RAM boot only). Persistent installation to flash and `sysupgrade` remain unvalidated |
+| Ethernet switch (RTL8367 family D) | Switch detected and initialized successfully. CPU link established at 2.5 Gbps (HSGMII trunk confirmed from four independent sources). `br-lan` membership and LAN-to-LAN forwarding confirmed on physical hardware (v0.3). Direct WAN external connectivity confirmed on physical hardware through successful external ping tests from the router (v0.4-2 / v0.4-3). `[REPORTED]` in v0.5 (Veraxis, physical hardware, 2026-11-20): the 2.5G trunk locks at 2.56 s and stays stable, with 3/3 cold boots and 2/2 soft reboots clean after the UNIPHY PCS preconfiguration. LAN-to-WAN client routing with DHCP confirmed. Formal multi-client throughput testing (iperf3) has not been done |
 | Default network roles | Factory MAC retrieval and network interface assignment implemented and verified on physical hardware (v0.4-3). Following the preinit mount fix, `tp_data` is automatically mounted and the factory MAC from `default-mac` is correctly assigned to `br-lan` and `wan` (MAC+1), matching the router label |
 | 2.4 GHz and 5 GHz Wi-Fi | Board-data loading fails with error `-12` in current builds; root cause unknown. Radio operation is unvalidated |
 | LEDs / buttons | All 7 LED nodes confirmed `GPIO_ACTIVE_HIGH` from live OEM device tree. LAN and WAN `netdev` link/activity triggers confirmed working on physical hardware (v0.4-2). Amber WAN LED connectivity logic (OEM `ledctrl` daemon) is a known limitation - not implemented |

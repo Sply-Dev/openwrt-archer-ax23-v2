@@ -112,7 +112,28 @@ Evidence from the OEM configuration:
 - The CPU link consistently establishes at 2.5 Gbit/s full duplex.
 - `br-lan` port membership and LAN-to-LAN packet forwarding were confirmed in v0.3.
 - WAN port physical link negotiation (1 Gbps) and external ICMP ping connectivity from the router were confirmed in v0.4-2 / v0.4-3.
-- Client LAN-to-WAN routing/NAT and sustained throughput under load remain to be tested.
+- v0.5 (2026-11-20, Veraxis, physical hardware): `[REPORTED]` the trunk locks at 2.56 s
+  and stays stable, with 3/3 cold boots and 2/2 soft reboots clean. LAN-to-WAN client
+  routing with automatic DHCP works (OpenSpeedTest: 444.95 Mbps down / 100.35 Mbps up;
+  the upload figure is ISP-dependent according to the tester).
+
+### Resolved in v0.5: trunk lock timing and UNIPHY preconfiguration
+
+Before v0.5, whether the EXT0/SDS0 trunk would lock reliably on cold boot was
+`[OPEN]`. On IPQ5018 the UNIPHY is only programmed to the target mode (`2500base-x`) on
+the first `ndo_open` of the Ethernet interface, while the RTL8367S-VB brings up its SerDes
+about 2 seconds earlier, during probe, and trains against whatever the bootloader left
+behind. Patch `0006` (`qca_uniphy_pcs_preconfig()`, a manual rebase of
+openwrt/openwrt#26597 by Johan Alvarado, `c127dev`) programs the UNIPHY at GMAC probe
+time. The earlier family C testing of that PR did not cover family D with HSGMII 2.5G;
+this result does. The `777-08` re-latch worker remains active as a fallback and was not
+tested as an alternative to the preconfig.
+
+The brief `lan1` link bounce seen between 65 s and 73 s is standard Gigabit
+auto-negotiation on the RJ45 port combined with the bridge STP delay. It is expected
+and does not affect the user.
+
+Optional future work, not a blocker: formal multi-client throughput under load (iperf3).
 
 ## 5. LED polarity and physical port mapping
 
@@ -150,7 +171,8 @@ carried here implements the appropriate PCS interfaces compatible with that refa
 ## 8.2. PR #19644's own checklist confirms the gap, and work to close it is already underway upstream
 
 The switch driver author continues to update the series upstream. Migration to newer
-patch revisions (e.g. v9/v10 or mainline submissions) is planned for the v0.5 release.
+patch revisions (e.g. v9/v10 or mainline submissions) is not part of v0.5. v0.5 added
+the UNIPHY PCS preconfiguration instead (see section 4); the `777-0x` series is unchanged.
 
 ## 8.3. Direct comparison: this tree's `777-07`/`777-08` already implement Alvarado's `phylink_pcs` model for family D
 

@@ -1,7 +1,7 @@
 # TP-Link Archer AX23 v2 - OpenWrt port status
 
 Status document for the `tplink_archer-ax23-v2` device (target `qualcommax/ipq50xx`).
-Snapshot date: 2026-10-17. Current post-snapshot update: 2026-11-11.
+Snapshot date: 2026-10-17. Current post-snapshot update: 2026-11-20.
 
 > **Snapshot status on 2026-10-17:** a functional boot on physical hardware had not yet been demonstrated.
 > The original audit below records the state on that date. Later hardware results
@@ -80,7 +80,25 @@ Snapshot date: 2026-10-17. Current post-snapshot update: 2026-11-11.
 > - **Milestone Progress:** Milestones M1 (RAM boot) and M2 (switch and CPU trunk) are achieved on
 >   physical hardware. M3 (Wi-Fi bring-up) remains blocked on ath11k board-data error `-12`.
 >   M4 (flash persistence) remains open pending `platform.sh` implementation.
->   
+>
+> **Post-snapshot update (2026-11-20, v0.5 hardware validation):**
+> - **UNIPHY PCS preconfiguration:** v0.5 adds `qca_uniphy_pcs_preconfig()` at GMAC probe
+>   time (patch `0006`, a manual rebase of openwrt/openwrt#26597 by Johan Alvarado,
+>   `c127dev`). On IPQ5018 the UNIPHY is otherwise programmed to `2500base-x` only on the
+>   first `ndo_open`, about 2 seconds after the RTL8367S-VB brings up its own SerDes.
+>   The family D re-latch worker (`777-08`) remains active as a fallback.
+> - **Result `[REPORTED]`** (Veraxis, physical hardware, 2026-11-20): the EXT0/SDS0
+>   trunk locked at 2.56 s and stayed stable; 3/3 cold boots and 2/2 soft reboots
+>   were clean. This replaces the earlier `[OPEN]` status ("not yet validated on
+>   physical hardware"). LAN-to-WAN with automatic DHCP works; OpenSpeedTest recorded
+>   444.95 Mbps down / 100.35 Mbps up / 12.0 ms ping / 1.00 ms jitter (the tester
+>   considers the upload figure ISP-dependent, not a router limit).
+> - **Link bounce:** the brief `lan1` bounce at 65-73 s is standard Gigabit
+>   auto-negotiation plus the bridge STP delay; expected, not a defect.
+> - **Milestones:** M1 and M2 remain achieved; M2 now includes cold-boot stability.
+>   M3 (Wi-Fi) remains blocked on ath11k board-data error `-12`. M4 remains open.
+> - Optional future work, not a blocker: formal multi-client throughput (iperf3).
+>
 ## Scope and evidence conventions
 
 Baseline reviewed:
@@ -326,12 +344,12 @@ designed to be non-persistent.
 |---|---|
 | Build integration and image generation | Done; builds and produces 4 images (`[VERIFIED]`, S1-S4) |
 | DTS to DTB consistency | Statically consistent (`[VERIFIED]`, S5-S6) |
-| Boot on the physical device | Demonstrated (v0.2–v0.4-3 TFTP RAM boot) `[VERIFIED]` / `[REPORTED]` |
-| Switch / Ethernet | Demonstrated on hardware (2.5G trunk, br-lan forwarding, WAN ping; client NAT pending) `[REPORTED]` |
+| Boot on the physical device | Demonstrated (v0.2–v0.5 TFTP RAM boot), including 3/3 cold boots in v0.5 `[REPORTED]` |
+| Switch / Ethernet | Demonstrated on hardware (2.5G trunk stable across cold boots, br-lan forwarding, WAN, LAN-to-WAN with DHCP; Veraxis, 2026-11-20, v0.5) `[REPORTED]` |
 | Wi-Fi 2.4 / 5 GHz | **Not demonstrated** (calibration offsets verified; board-data loading fails with error -12) `[OPEN]` |
 | Default network config and MAC assignment | Verified on physical hardware (patches 0002–0005, v0.4-3) `[VERIFIED]` / `[REPORTED]` |
 | Persistent install / `sysupgrade` / rollback | **Not implemented** |
-| Switch driver patch set | Carries v7 of an upstream series (openwrt/openwrt#19644), with third-party and local hardware validation. Newer revisions planned for v0.5. |
+| Switch driver patch set | Carries v7 of an upstream series (openwrt/openwrt#19644), with third-party and local hardware validation. Newer revisions are not part of v0.5; v0.5 adds the UNIPHY PCS preconfiguration (patch `0006`) on top. |
 
 The port is at the "builds and is statically consistent" stage. The single most important gap
 is that nothing has ever executed on the target hardware.
