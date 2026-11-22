@@ -55,6 +55,8 @@ the EX511 v2 report does not validate this board.
 | `docs/KNOWN-ISSUES.md` | Open problems, unknowns, and licensing notes |
 | `docs/archer-ax23-v2-port-status.md` | Point-in-time status snapshot with evidence tags |
 | `docs/CREDITS.md` | Who wrote what - this project's own work vs. carried-in third-party patches |
+| `docs/CONTRIBUTION-INVENTORY.md` | Patch-by-patch disposition of the independent engineering series and this draft contribution |
+| `tests/host/` | Host-side ath11k and Q6 source/model checks (not hardware tests) |
 | `target/` | DTS, image definition snippet, and carried-in switch driver patches for this device |
 | `patches/` | Locally maintained patches applied manually during the build, including ath11k caldata and AX23 v2 board defaults |
 

@@ -186,3 +186,16 @@ Read `TESTING.md` before attempting any hardware testing.
 - The `rtl8365mb` switch driver is built directly into the kernel in the tested configuration, not as a loadable module. The applied net-next v7 series contains support for multiple chip families; the presence of RTL8367S-VB support in the driver does not establish that this specific hardware configuration has been validated.
 - `CONFIG_SERIAL_AMBA_PL011` / `_CONSOLE` were enabled in `target/linux/qualcommax/config-6.18` specifically to allow booting the initramfs image under QEMU's `virt` machine for userspace-level smoke testing. **This does not exercise the IPQ5018 SoC, RTL8367 switch, NAND, or either radio.** A QEMU boot only demonstrates that the initramfs userspace itself is not broken. See `TESTING.md`.
 - Wi-Fi compatibility was deliberately outside current testing scope. While caldata offsets (0x1000 for IPQ5018 and 0x26800 for QCN6122 in `0:ART`) have been confirmed bit-for-bit against hardware dumps, the current ath11k driver fails to fetch board-data with error `-12`. See `docs/KNOWN-ISSUES.md`, Section 2.
+
+## Proposed constrained-memory/recovery contribution (review branch only)
+
+The optional patches `0006` through `0012` carry ath11k low-memory ring sizing, partial DMA/datapath cleanup, and IPQ5018 Q6 multi-PD recovery changes proposed for review. They are not part of the previously hardware-tested Sply build unless explicitly applied. The patches add OpenWrt patch files under the ath11k mac80211 backports and qualcommax kernel patch series; apply them at the OpenWrt source root after the existing device patches:
+
+```sh
+for p in /path/to/ax23v2-public/patches/000{6..9}-*.patch \
+         /path/to/ax23v2-public/patches/001{0..2}-*.patch; do
+    git apply --check "$p" && git apply "$p"
+done
+```
+
+Then run the relevant host-side checks from `tests/host/README.md` against the prepared kernel and backports source, followed by a target build before treating the OpenWrt source changes as validated. The Q6 scenario harness is a model, not a concurrent-kernel proof. None of these changes demonstrates resolution of the existing ath11k board-file `-12` error or physical radio operation. See [`CONTRIBUTION-INVENTORY.md`](CONTRIBUTION-INVENTORY.md) for the complete 27-patch disposition and reasons other changes were left out.

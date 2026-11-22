@@ -80,3 +80,7 @@ per the kernel tree they patch; see each patch file for specifics.
 - **gusfm** (OpenWrt forum) - reported testing the v5/v6 revision of the
   `777-0x` series on a TP-Link EX511 v2 (same switch family), referenced in
   [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) §8.
+
+## Proposed AX23 Wi-Fi memory/recovery contribution
+
+Patches `0006` through `0012` and their host-side regression checks are proposed contributions carried from the independent [`john35413/openwrt-archer-ax23-v2-build`](https://github.com/john35413/openwrt-archer-ax23-v2-build) engineering project. The patch mail headers retain their original author/sign-off metadata; this repository does not claim sole authorship. The series was developed with Claude and Codex-assisted engineering and independently reviewed in that project. Its separate offline build and model tests are not hardware validation of Sply's tree. See [`CONTRIBUTION-INVENTORY.md`](CONTRIBUTION-INVENTORY.md) for patch-by-patch origin and disposition.
