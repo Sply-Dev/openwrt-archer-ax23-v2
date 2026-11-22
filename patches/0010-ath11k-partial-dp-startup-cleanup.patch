@@ -1,0 +1,46 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AX23 contributors <ax23@users.noreply.invalid>
+Date: Sat, 21 Nov 2026 21:52:42 +0200
+Subject: [PATCH] mac80211: ath11k: release WBM idle ring and TX FIFOs on setup
+ failure
+
+---
+ ...ring-and-TX-FIFOs-on-startup-failure.patch | 29 +++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+ create mode 100644 package/kernel/mac80211/patches/ath11k/964-wifi-ath11k-unwind-idle-ring-and-TX-FIFOs-on-startup-failure.patch
+
+diff --git a/package/kernel/mac80211/patches/ath11k/964-wifi-ath11k-unwind-idle-ring-and-TX-FIFOs-on-startup-failure.patch b/package/kernel/mac80211/patches/ath11k/964-wifi-ath11k-unwind-idle-ring-and-TX-FIFOs-on-startup-failure.patch
+new file mode 100644
+index 0000000..ba4a4e8
+--- /dev/null
++++ b/package/kernel/mac80211/patches/ath11k/964-wifi-ath11k-unwind-idle-ring-and-TX-FIFOs-on-startup-failure.patch
+@@ -0,0 +1,29 @@
++Subject: wifi: ath11k: release DP startup resources after partial allocation
++
++ath11k_core_firmware_ready does not call ath11k_dp_free if DP allocation
++fails. Release the WBM idle ring acquired before descriptor setup and
++all previously allocated host TX status FIFOs on the matching exits.
++
++--- a/drivers/net/wireless/ath/ath11k/dp.c
+++++ b/drivers/net/wireless/ath/ath11k/dp.c
++@@ -1075,7 +1075,7 @@
++ 					HAL_WBM_IDLE_LINK, srng, n_link_desc);
++ 	if (ret) {
++ 		ath11k_warn(ab, "failed to setup link desc: %d\n", ret);
++-		return ret;
+++		goto fail_link_desc_cleanup;
++ 	}
++ 
++ 	ret = ath11k_dp_srng_common_setup(ab);
++@@ -1106,6 +1106,11 @@
++ 	return 0;
++ 
++ fail_cmn_srng_cleanup:
+++	while (i > 0) {
+++		i--;
+++		kfree(dp->tx_ring[i].tx_status);
+++		dp->tx_ring[i].tx_status = NULL;
+++	}
++ 	ath11k_dp_srng_common_cleanup(ab);
++ 
++ fail_link_desc_cleanup:

@@ -1,0 +1,250 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
+Date: Sat, 21 Nov 2026 22:20:13 +0000
+Subject: [PATCH] qualcommax: mpd: recover user PDs with the root PD
+
+The IPQ5018 Q6 uses the multi-PD remoteproc driver, not wcss-sec, so
+0016's coredump change does not reach it. This driver has no coredump
+stall (it registers no dump segments), but its recovery had gaps:
+
+- a root PD restart never respawned the user PDs, and ath11k on AHB
+  only waits for their QMI service, so Wi-Fi stayed down until reboot;
+- a user PD recovery could spawn into a crashed root PD before the root
+  PD recovery ran, time out and stay down;
+- a failed spawn, internal radio power-up or segment load leaked the
+  MSA lock and the root PD reference (.stop is not called after a
+  failed .start).
+
+Respawn user PDs left from an earlier root PD instance, let a pending
+root PD recovery finish before loading a user PD, and undo load/start
+on failure.
+
+Signed-off-by: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
+---
+ ...pd-recover-user-PDs-with-the-root-PD.patch | 214 ++++++++++++++++++
+ 1 file changed, 214 insertions(+)
+ create mode 100644 target/linux/qualcommax/patches-6.18/0821-remoteproc-qcom_q6v5_mpd-recover-user-PDs-with-the-root-PD.patch
+
+diff --git a/target/linux/qualcommax/patches-6.18/0821-remoteproc-qcom_q6v5_mpd-recover-user-PDs-with-the-root-PD.patch b/target/linux/qualcommax/patches-6.18/0821-remoteproc-qcom_q6v5_mpd-recover-user-PDs-with-the-root-PD.patch
+new file mode 100644
+index 0000000000..dbdaf9a519
+--- /dev/null
++++ b/target/linux/qualcommax/patches-6.18/0821-remoteproc-qcom_q6v5_mpd-recover-user-PDs-with-the-root-PD.patch
+@@ -0,0 +1,214 @@
++From: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
++Subject: [PATCH] remoteproc: qcom_q6v5_mpd: recover user PDs with the root PD
++
++ath11k on AHB only waits for its QMI service to come back after a Q6
++firmware crash, so Wi-Fi returns only if the user PD is respawned.
++
++- A root PD restart left every user PD unspawned: nothing ever set their
++  spawn bit again. Count root PD starts and report a crash for each user
++  PD still marked running from an earlier root PD instance.
++- rproc_boot() returns success for a root PD that is crashed but not yet
++  recovered, so a user PD recovery could spawn into a dead Q6, time out
++  and stay down. Let a pending root PD recovery finish first.
++- rproc_start() does not call .stop when .start fails: a failed spawn
++  or internal radio power-up kept the MSA lock and the root PD reference
++  taken by .load, and a failed segment load kept the root PD reference.
++  Undo both on failure and release each only once.
++
++Coredump is unchanged: this driver registers no dump segments, so the
++core's coredump step returns immediately.
++
++Signed-off-by: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
++---
++--- a/drivers/remoteproc/qcom_q6v5_mpd.c
+++++ b/drivers/remoteproc/qcom_q6v5_mpd.c
++@@ -87,6 +87,8 @@
++ 	const struct wcss_data *desc;
++ 	const char **firmware;
++ 	struct userpd *upd[MAX_UPD];
+++	unsigned int boot_gen;
+++	struct work_struct upd_recovery;
++ };
++ 
++ struct userpd {
++@@ -94,6 +96,9 @@
++ 	struct device *dev;
++ 	struct qcom_rproc_ssr ssr_subdev;
++ 	struct qcom_q6v5 q6;
+++	bool rpd_held;
+++	bool msa_locked;
+++	unsigned int boot_gen;
++ };
++ 
++ struct wcss_data {
++@@ -131,10 +136,40 @@
++ 	}
++ 
++ 	ret = qcom_q6v5_wait_for_start(&wcss->q6, 5 * HZ);
++-	if (ret == -ETIMEDOUT)
+++	if (ret == -ETIMEDOUT) {
++ 		dev_err(wcss->dev, "start timed out\n");
+++		return ret;
+++	}
++ 
++-	return ret;
+++	/* User PDs do not survive a root PD restart; respawn the ones left behind */
+++	WRITE_ONCE(wcss->boot_gen, wcss->boot_gen + 1);
+++	queue_work(system_long_wq, &wcss->upd_recovery);
+++
+++	return 0;
+++}
+++
+++static void q6_wcss_recover_userpds(struct work_struct *work)
+++{
+++	struct q6_wcss *wcss = container_of(work, struct q6_wcss, upd_recovery);
+++	unsigned int gen = READ_ONCE(wcss->boot_gen);
+++	struct rproc *rproc;
+++	int i;
+++
+++	for (i = 0; i < ARRAY_SIZE(wcss->upd); i++) {
+++		if (!wcss->upd[i])
+++			continue;
+++		rproc = wcss->upd[i]->q6.rproc;
+++
+++		/* let a recovery that the PD reported itself finish first */
+++		flush_work(&rproc->crash_handler);
+++
+++		if (READ_ONCE(rproc->state) == RPROC_RUNNING &&
+++		    READ_ONCE(wcss->upd[i]->boot_gen) != gen) {
+++			dev_err(wcss->dev, "%s did not survive the root PD restart\n",
+++				rproc->name);
+++			rproc_report_crash(rproc, RPROC_FATAL_ERROR);
+++		}
+++	}
++ }
++ 
++ static int q6_wcss_spawn_pd(struct rproc *rproc)
++@@ -158,6 +193,16 @@
++ 	return ret;
++ }
++ 
+++static void wcss_pd_put_rpd(struct userpd *upd, struct rproc *rpd_rproc)
+++{
+++	if (!upd->rpd_held)
+++		return;
+++
+++	upd->rpd_held = false;
+++	rproc_shutdown(rpd_rproc);
+++}
+++
+++/* rproc_start() does not call .stop when .start fails: undo .load and .start here */
++ static int wcss_pd_start(struct rproc *rproc)
++ {
++ 	struct userpd *upd = rproc->priv;
++@@ -169,23 +214,32 @@
++ 	ret = qcom_scm_msa_lock(pasid);
++ 	if (ret) {
++ 		dev_err(upd->dev, "failed to power up pd\n");
++-		return ret;
+++		goto put_rpd;
++ 	}
+++	upd->msa_locked = true;
++ 
++ 	if (upd->q6.spawn_bit) {
++ 		ret = q6_wcss_spawn_pd(rproc);
++ 		if (ret)
++-			return ret;
+++			goto msa_unlock;
++ 	}
++ 
++ 	if (upd->pd_asid == 1) {
++ 		ret = qcom_scm_internal_wifi_powerup(wcss->desc->pasid);
++ 		if (ret) {
++ 			dev_err(upd->dev, "failed to power up internal radio\n");
++-			return ret;
+++			goto msa_unlock;
++ 		}
++ 	}
++ 
+++	WRITE_ONCE(upd->boot_gen, READ_ONCE(wcss->boot_gen));
+++	return 0;
+++
+++msa_unlock:
+++	if (!qcom_scm_msa_unlock(pasid))
+++		upd->msa_locked = false;
+++put_rpd:
+++	wcss_pd_put_rpd(upd, rpd_rproc);
++ 	return ret;
++ }
++ 
++@@ -260,13 +314,16 @@
++ 		}
++ 	}
++ 
++-	ret = qcom_scm_msa_unlock(pasid);
++-	if (ret) {
++-		dev_err(upd->dev, "failed to power down pd\n");
++-		return ret;
+++	if (upd->msa_locked) {
+++		ret = qcom_scm_msa_unlock(pasid);
+++		if (ret) {
+++			dev_err(upd->dev, "failed to power down pd\n");
+++			return ret;
+++		}
+++		upd->msa_locked = false;
++ 	}
++ 
++-	rproc_shutdown(rpd_rproc);
+++	wcss_pd_put_rpd(upd, rpd_rproc);
++ 
++ 	return 0;
++ }
++@@ -505,14 +562,32 @@
++ 	struct q6_wcss *wcss = rpd_rproc->priv;
++ 	int ret;
++ 
++-	ret = rproc_boot(rpd_rproc);
++-	if (ret)
++-		return ret;
+++	/* rproc_boot() succeeds on a crashed root PD: let its recovery finish first */
+++	flush_work(&rpd_rproc->crash_handler);
++ 
++-	return qcom_mdt_load_pd_seg(upd->dev, fw, rproc->firmware,
+++	if (!upd->rpd_held) {
+++		ret = rproc_boot(rpd_rproc);
+++		if (ret)
+++			return ret;
+++		upd->rpd_held = true;
+++	}
+++
+++	if (READ_ONCE(rpd_rproc->state) != RPROC_RUNNING) {
+++		dev_err(upd->dev, "root PD is not running\n");
+++		ret = -EAGAIN;
+++		goto put_rpd;
+++	}
+++
+++	ret = qcom_mdt_load_pd_seg(upd->dev, fw, rproc->firmware,
++ 			     wcss->desc->pasid, upd->pd_asid, wcss->mem_region,
++ 			     wcss->mem_phys, wcss->mem_size,
++ 			     NULL);
+++	if (!ret)
+++		return 0;
+++
+++put_rpd:
+++	wcss_pd_put_rpd(upd, rpd_rproc);
+++	return ret;
++ }
++ 
++ static unsigned long q6_wcss_panic(struct rproc *rproc)
++@@ -782,6 +857,7 @@
++ 	wcss->dev = &pdev->dev;
++ 	wcss->desc = of_device_get_match_data(&pdev->dev);
++ 	wcss->firmware = firmware;
+++	INIT_WORK(&wcss->upd_recovery, q6_wcss_recover_userpds);
++ 
++ 	ret = q6_alloc_memory_region(wcss);
++ 	if (ret)
++@@ -836,6 +912,7 @@
++ 	struct rproc *rproc = platform_get_drvdata(pdev);
++ 	struct q6_wcss *wcss = rproc->priv;
++ 
+++	cancel_work_sync(&wcss->upd_recovery);
++ 	qcom_q6v5_deinit(&wcss->q6);
++ 
++ 	rproc_del(rproc);
+-- 
+2.43.0
+
