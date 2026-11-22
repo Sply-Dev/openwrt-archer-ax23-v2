@@ -198,4 +198,19 @@ for p in /path/to/ax23v2-public/patches/000{6..9}-*.patch \
 done
 ```
 
-Then run the relevant host-side checks from `tests/host/README.md` against the prepared kernel and backports source, followed by a target build before treating the OpenWrt source changes as validated. The Q6 scenario harness is a model, not a concurrent-kernel proof. None of these changes demonstrates resolution of the existing ath11k board-file `-12` error or physical radio operation. See [`CONTRIBUTION-INVENTORY.md`](CONTRIBUTION-INVENTORY.md) for the complete 27-patch disposition and reasons other changes were left out.
+### Focused PR #2 integration check (2026-11-22)
+
+The seven wrapper patches in `contrib/ax23-wifi-memory-recovery` were applied in the documented order to OpenWrt commit `98b1185d039344553aaf8270d0661cfad4f0a54d`; all seven `git apply --check` and apply steps passed. The target source reports Linux `6.18.55`. OpenWrt's mac80211 package pins backports `7.2` with source hash `6ec76a4cb0988b5382b2fc5053610a56ada90b8ef6a5a4f2807cd433badb9454`.
+
+The following scoped target steps completed successfully in an isolated worktree using the AX23 target configuration and copied local download/staging caches (not a clean-room or full firmware build):
+
+- `make -j2 V=s target/linux/prepare`
+- `make -j2 V=s package/kernel/mac80211/prepare`
+- `make -j2 V=s target/linux/compile`
+- `make -j2 V=s package/kernel/mac80211/compile`
+
+The compiled Linux object `drivers/remoteproc/qcom_q6v5_mpd.o` contains `q6_wcss_recover_userpds`; the backports build produced `ath11k/dp.o`, `dp_tx.o`, `dp_rx.o`, and `ath11k.ko` (Linux 6.18.55). This verifies compilation and inclusion in these target objects/modules, not runtime recovery or radio operation.
+
+Focused tests passed against the integration-prepared sources: the ath11k ring-allocation check, the eight-scenario Q6 recovery model, and `python3 -m unittest discover -s tests/host -p 'test_*.py'` (13 tests). These are source/model tests, not a faithful concurrent-kernel or DMA-hardware test. The first mac80211 compile attempt stopped earlier while rebuilding host `apk`: copied `.pc/.la` metadata contained an old absolute staging path, adding a duplicate host include directory and hiding glibc endian helpers. After correcting only that metadata in the isolated build tree and regenerating the host package, the retry and mac80211 target completed. The PR source and standalone checkout were not altered by that repair.
+
+This check does not claim a complete firmware build, resolve ath11k board-file `-12`, validate either radio on hardware, prove kernel deadlock freedom, or replace Sply's hardware testing. The Q6 scenario harness remains a model. See [`CONTRIBUTION-INVENTORY.md`](CONTRIBUTION-INVENTORY.md) for the full 27-patch disposition.
