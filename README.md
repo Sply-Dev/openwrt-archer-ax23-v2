@@ -16,7 +16,7 @@ AX23 v1, which is MediaTek MT7621-based and already officially supported by Open
 > Test source: Veraxis, physical hardware, 2026-11-20. See
 > [`docs/TESTING.md`](docs/TESTING.md) for the full test log.
 >
-> Patch `0006` is not part of this branch; it is under review in a separate draft PR.
+> Patch `0006`(or `0007`) is not part of this branch; it is under review in a separate draft PR.
 > Persistent installation to NAND flash and `sysupgrade` are not validated. Wi-Fi radio
 > operation (ath11k board-data error `-12`) and A/B boot handling remain unvalidated.
 
