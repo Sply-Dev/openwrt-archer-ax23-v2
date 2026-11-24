@@ -1,0 +1,186 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
+Date: Sat, 21 Nov 2026 07:08:00 +0000
+Subject: [PATCH] mac80211: ath11k: smaller host RX rings in FW memory mode 2
+
+Boards declaring qcom,ath11k-fw-memory-mode = <2> (256 MiB) otherwise
+pre-post ~9200 2 KiB RX buffers per radio. Select reduced RX ring
+sizes at runtime from the FW memory mode so only those boards change.
+See the patch description for the sizes and their sources.
+---
+ ...er-host-RX-rings-in-FW-memory-mode-2.patch | 166 ++++++++++++++++++
+ 1 file changed, 166 insertions(+)
+ create mode 100644 package/kernel/mac80211/patches/ath11k/960-wifi-ath11k-use-smaller-host-RX-rings-in-FW-memory-mode-2.patch
+
+diff --git a/package/kernel/mac80211/patches/ath11k/960-wifi-ath11k-use-smaller-host-RX-rings-in-FW-memory-mode-2.patch b/package/kernel/mac80211/patches/ath11k/960-wifi-ath11k-use-smaller-host-RX-rings-in-FW-memory-mode-2.patch
+new file mode 100644
+index 0000000000..ec7431576e
+--- /dev/null
++++ b/package/kernel/mac80211/patches/ath11k/960-wifi-ath11k-use-smaller-host-RX-rings-in-FW-memory-mode-2.patch
+@@ -0,0 +1,166 @@
++From: AX23_V2_OPENWRT project
++Subject: [PATCH] wifi: ath11k: use smaller host RX rings in FW memory mode 2
++
++Boards that set "qcom,ath11k-fw-memory-mode = <2>" are 256 MiB boards
++(e.g. IPQ5018 + QCN6122 with 48 MiB of Q6 carve-out). The host still
++sizes its per-pdev RX rings for 1 GiB systems and pre-posts
++4096 (RXDMA buf) + 4096 (monitor buf) + 1024 (monitor status) 2 KiB
++RX buffers per radio, ~25 MiB per radio before a single client
++associates.
++
++Select the RX ring sizes at runtime from the radio's FW memory mode,
++so only boards that already declare the 256 MiB FW profile are
++affected and no build-wide flag changes other boards:
++
++  RXDMA buf      4096 -> 512 (IPQ5018) / 1024 (QCN6122)
++  RXDMA err dst  1024 -> 128
++  mon status     1024 -> 512
++  mon buf/dst    4096/2048 -> 128
++  mon desc       4096 -> 128
++
++The monitor/status values follow the QSDK 512M profile. QCN6122 keeps
++1024 RXDMA buffers because 512 was measured to overflow under upload
++bursts on another IPQ5018+QCN6122 256 MiB board. The monitor
++link-descriptor count is derived from the allocated ring size, so it
++follows automatically.
++
++The TX completion ring (32768 entries) is intentionally unchanged: its
++size is part of the ATH11K_TX_COMPL_NEXT() wrap arithmetic and needs a
++separate change.
++---
++diff --git a/drivers/net/wireless/ath/ath11k/dp.h b/drivers/net/wireless/ath/ath11k/dp.h
++index 84f6683..8df57e2 100644
++--- a/drivers/net/wireless/ath/ath11k/dp.h
+++++ b/drivers/net/wireless/ath/ath11k/dp.h
++@@ -224,6 +224,21 @@ struct ath11k_pdev_dp {
++ #define DP_RXDMA_MONITOR_DST_RING_SIZE	2048
++ #define DP_RXDMA_MONITOR_DESC_RING_SIZE	4096
++ 
+++/* Host RX ring sizes used when the radio runs in FW memory mode 2
+++ * ("qcom,ath11k-fw-memory-mode = <2>", 256 MiB boards). The default sizes
+++ * above pre-post ~9200 2 KiB RX buffers per radio, which a 256 MiB IPQ5018
+++ * board with two radios cannot afford. Values follow the QSDK 512M profile
+++ * for the monitor/status rings; the RXDMA buffer ring is 512 for IPQ5018
+++ * and 1024 for QCN6122, which overflows at 512 under upload bursts.
+++ */
+++#define DP_RXDMA_BUF_RING_SIZE_LOWMEM		512
+++#define DP_RXDMA_BUF_RING_SIZE_LOWMEM_QCN6122	1024
+++#define DP_RXDMA_ERR_DST_RING_SIZE_LOWMEM	128
+++#define DP_RXDMA_MON_STATUS_RING_SIZE_LOWMEM	512
+++#define DP_RXDMA_MONITOR_BUF_RING_SIZE_LOWMEM	128
+++#define DP_RXDMA_MONITOR_DST_RING_SIZE_LOWMEM	128
+++#define DP_RXDMA_MONITOR_DESC_RING_SIZE_LOWMEM	128
+++
++ #define DP_RX_RELEASE_RING_NUM	3
++ 
++ #define DP_RX_BUFFER_SIZE	2048
++diff --git a/drivers/net/wireless/ath/ath11k/dp_rx.c b/drivers/net/wireless/ath/ath11k/dp_rx.c
++index d98c837..ef14f88 100644
++--- a/drivers/net/wireless/ath/ath11k/dp_rx.c
+++++ b/drivers/net/wireless/ath/ath11k/dp_rx.c
++@@ -567,6 +567,50 @@ err_reo_cleanup:
++ 	return ret;
++ }
++ 
+++enum ath11k_dp_rx_ring {
+++	ATH11K_DP_RX_RING_BUF,
+++	ATH11K_DP_RX_RING_ERR_DST,
+++	ATH11K_DP_RX_RING_MON_STATUS,
+++	ATH11K_DP_RX_RING_MON_BUF,
+++	ATH11K_DP_RX_RING_MON_DST,
+++	ATH11K_DP_RX_RING_MON_DESC,
+++};
+++
+++/* Ring entry counts for the per-pdev RX rings. FW memory mode 2 is the
+++ * 256 MiB profile, so use the reduced host ring sizes there as well.
+++ */
+++static int ath11k_dp_rx_ring_size(struct ath11k_base *ab,
+++				  enum ath11k_dp_rx_ring ring)
+++{
+++	bool lowmem = ab->hw_params.fw_mem_mode == 2;
+++
+++	switch (ring) {
+++	case ATH11K_DP_RX_RING_BUF:
+++		if (!lowmem)
+++			return DP_RXDMA_BUF_RING_SIZE;
+++		return ab->hw_rev == ATH11K_HW_QCN6122_HW10 ?
+++		       DP_RXDMA_BUF_RING_SIZE_LOWMEM_QCN6122 :
+++		       DP_RXDMA_BUF_RING_SIZE_LOWMEM;
+++	case ATH11K_DP_RX_RING_ERR_DST:
+++		return lowmem ? DP_RXDMA_ERR_DST_RING_SIZE_LOWMEM :
+++				DP_RXDMA_ERR_DST_RING_SIZE;
+++	case ATH11K_DP_RX_RING_MON_STATUS:
+++		return lowmem ? DP_RXDMA_MON_STATUS_RING_SIZE_LOWMEM :
+++				DP_RXDMA_MON_STATUS_RING_SIZE;
+++	case ATH11K_DP_RX_RING_MON_BUF:
+++		return lowmem ? DP_RXDMA_MONITOR_BUF_RING_SIZE_LOWMEM :
+++				DP_RXDMA_MONITOR_BUF_RING_SIZE;
+++	case ATH11K_DP_RX_RING_MON_DST:
+++		return lowmem ? DP_RXDMA_MONITOR_DST_RING_SIZE_LOWMEM :
+++				DP_RXDMA_MONITOR_DST_RING_SIZE;
+++	case ATH11K_DP_RX_RING_MON_DESC:
+++		return lowmem ? DP_RXDMA_MONITOR_DESC_RING_SIZE_LOWMEM :
+++				DP_RXDMA_MONITOR_DESC_RING_SIZE;
+++	}
+++
+++	return 0;
+++}
+++
++ static int ath11k_dp_rx_pdev_srng_alloc(struct ath11k *ar)
++ {
++ 	struct ath11k_pdev_dp *dp = &ar->dp;
++@@ -578,7 +622,8 @@ static int ath11k_dp_rx_pdev_srng_alloc(struct ath11k *ar)
++ 	ret = ath11k_dp_srng_setup(ar->ab,
++ 				   &dp->rx_refill_buf_ring.refill_buf_ring,
++ 				   HAL_RXDMA_BUF, 0,
++-				   dp->mac_id, DP_RXDMA_BUF_RING_SIZE);
+++				   dp->mac_id,
+++				   ath11k_dp_rx_ring_size(ab, ATH11K_DP_RX_RING_BUF));
++ 	if (ret) {
++ 		ath11k_warn(ar->ab, "failed to setup rx_refill_buf_ring\n");
++ 		return ret;
++@@ -601,7 +646,7 @@ static int ath11k_dp_rx_pdev_srng_alloc(struct ath11k *ar)
++ 	for (i = 0; i < ab->hw_params.num_rxdma_per_pdev; i++) {
++ 		ret = ath11k_dp_srng_setup(ar->ab, &dp->rxdma_err_dst_ring[i],
++ 					   HAL_RXDMA_DST, 0, dp->mac_id + i,
++-					   DP_RXDMA_ERR_DST_RING_SIZE);
+++					   ath11k_dp_rx_ring_size(ab, ATH11K_DP_RX_RING_ERR_DST));
++ 		if (ret) {
++ 			ath11k_warn(ar->ab, "failed to setup rxdma_err_dst_ring %d\n", i);
++ 			return ret;
++@@ -613,7 +658,7 @@ static int ath11k_dp_rx_pdev_srng_alloc(struct ath11k *ar)
++ 		ret = ath11k_dp_srng_setup(ar->ab,
++ 					   srng,
++ 					   HAL_RXDMA_MONITOR_STATUS, 0, dp->mac_id + i,
++-					   DP_RXDMA_MON_STATUS_RING_SIZE);
+++					   ath11k_dp_rx_ring_size(ab, ATH11K_DP_RX_RING_MON_STATUS));
++ 		if (ret) {
++ 			ath11k_warn(ar->ab,
++ 				    "failed to setup rx_mon_status_refill_ring %d\n", i);
++@@ -636,7 +681,7 @@ static int ath11k_dp_rx_pdev_srng_alloc(struct ath11k *ar)
++ 	ret = ath11k_dp_srng_setup(ar->ab,
++ 				   &dp->rxdma_mon_buf_ring.refill_buf_ring,
++ 				   HAL_RXDMA_MONITOR_BUF, 0, dp->mac_id,
++-				   DP_RXDMA_MONITOR_BUF_RING_SIZE);
+++				   ath11k_dp_rx_ring_size(ab, ATH11K_DP_RX_RING_MON_BUF));
++ 	if (ret) {
++ 		ath11k_warn(ar->ab,
++ 			    "failed to setup HAL_RXDMA_MONITOR_BUF\n");
++@@ -645,7 +690,7 @@ static int ath11k_dp_rx_pdev_srng_alloc(struct ath11k *ar)
++ 
++ 	ret = ath11k_dp_srng_setup(ar->ab, &dp->rxdma_mon_dst_ring,
++ 				   HAL_RXDMA_MONITOR_DST, 0, dp->mac_id,
++-				   DP_RXDMA_MONITOR_DST_RING_SIZE);
+++				   ath11k_dp_rx_ring_size(ab, ATH11K_DP_RX_RING_MON_DST));
++ 	if (ret) {
++ 		ath11k_warn(ar->ab,
++ 			    "failed to setup HAL_RXDMA_MONITOR_DST\n");
++@@ -654,7 +699,7 @@ static int ath11k_dp_rx_pdev_srng_alloc(struct ath11k *ar)
++ 
++ 	ret = ath11k_dp_srng_setup(ar->ab, &dp->rxdma_mon_desc_ring,
++ 				   HAL_RXDMA_MONITOR_DESC, 0, dp->mac_id,
++-				   DP_RXDMA_MONITOR_DESC_RING_SIZE);
+++				   ath11k_dp_rx_ring_size(ab, ATH11K_DP_RX_RING_MON_DESC));
++ 	if (ret) {
++ 		ath11k_warn(ar->ab,
++ 			    "failed to setup HAL_RXDMA_MONITOR_DESC\n");

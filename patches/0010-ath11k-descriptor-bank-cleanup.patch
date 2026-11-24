@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AX23 contributors <ax23@users.noreply.invalid>
+Date: Sat, 21 Nov 2026 21:47:23 +0200
+Subject: [PATCH] mac80211: ath11k: unwind the descriptor banks owned by the
+ caller
+
+---
+ ...ested-link-descriptor-banks-on-error.patch | 24 +++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+ create mode 100644 package/kernel/mac80211/patches/ath11k/963-wifi-ath11k-free-requested-link-descriptor-banks-on-error.patch
+
+diff --git a/package/kernel/mac80211/patches/ath11k/963-wifi-ath11k-free-requested-link-descriptor-banks-on-error.patch b/package/kernel/mac80211/patches/ath11k/963-wifi-ath11k-free-requested-link-descriptor-banks-on-error.patch
+new file mode 100644
+index 0000000..acf4e00
+--- /dev/null
++++ b/package/kernel/mac80211/patches/ath11k/963-wifi-ath11k-free-requested-link-descriptor-banks-on-error.patch
+@@ -0,0 +1,24 @@
++Subject: wifi: ath11k: unwind the descriptor bank array being allocated
++
++The monitor and WBM callers supply distinct arrays. Free the same array
++that this allocation populated when a coherent allocation fails.
++
++--- a/drivers/net/wireless/ath/ath11k/dp.c
+++++ b/drivers/net/wireless/ath/ath11k/dp.c
++@@ -597,7 +597,6 @@
++ 					  int n_link_desc_bank,
++ 					  int last_bank_sz)
++ {
++-	struct ath11k_dp *dp = &ab->dp;
++ 	int i;
++ 	int ret = 0;
++ 	int desc_sz = DP_LINK_DESC_ALLOC_SIZE_THRESH;
++@@ -626,7 +625,7 @@
++ 	return 0;
++ 
++ err:
++-	ath11k_dp_link_desc_bank_free(ab, dp->link_desc_banks);
+++	ath11k_dp_link_desc_bank_free(ab, desc_bank);
++ 
++ 	return ret;
++ }

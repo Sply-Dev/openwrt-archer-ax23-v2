@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
+Date: Sat, 21 Nov 2026 07:08:25 +0000
+Subject: [PATCH] qualcommax: ipq50xx: add board-data package for Archer AX23
+ v2
+
+Both ath11k radios fail at board-data lookup on this board: there is no
+TP-Link-Archer-AX23-v2 entry in any public board-2.bin. Add a package
+that installs locally supplied board files (generated from the unit's
+own stock firmware; never committed) and pull it into DEVICE_PACKAGES.
+When the files are absent the package installs a marker file so the
+missing data is visible on the device and in artifact validation.
+---
+ .../ipq-wifi-tplink-archer-ax23-v2/Makefile   | 53 +++++++++++++++++++
+ .../files/.keep                               |  0
+ target/linux/qualcommax/image/ipq50xx.mk      |  1 +
+ 3 files changed, 54 insertions(+)
+ create mode 100644 package/firmware/ipq-wifi-tplink-archer-ax23-v2/Makefile
+ create mode 100644 package/firmware/ipq-wifi-tplink-archer-ax23-v2/files/.keep
+
+diff --git a/package/firmware/ipq-wifi-tplink-archer-ax23-v2/Makefile b/package/firmware/ipq-wifi-tplink-archer-ax23-v2/Makefile
+new file mode 100644
+index 0000000000..eb1aa1e556
+--- /dev/null
++++ b/package/firmware/ipq-wifi-tplink-archer-ax23-v2/Makefile
+@@ -0,0 +1,53 @@
++# SPDX-License-Identifier: GPL-2.0-only
++#
++# board-2.bin for the TP-Link Archer AX23 v2 (IPQ5018 2.4 GHz + QCN6102
++# 5 GHz). No AX23 v2 board data exists in openwrt/firmware/qca-wireless,
++# and ath11k cannot bring either radio up without it (it reports
++# "qmi failed to fetch board file: -12" - the -12 is the firmware
++# user-helper's result for a missing file, not a real allocation failure).
++#
++# The board files are proprietary TP-Link/Qualcomm data and are NOT part
++# of this tree. Generate them from your own unit's stock firmware with
++# AX23_V2_OPENWRT/tools/bdf/ and drop them into files/:
++#   files/board-tplink_archer-ax23-v2.ipq5018
++#   files/board-tplink_archer-ax23-v2.qcn6122
++# Each must be a board-2.bin containing
++#   bus=ahb,qmi-chip-id=0,qmi-board-id=255,variant=TP-Link-Archer-AX23-v2
++# Without them the package installs only a marker file and Wi-Fi stays
++# down (boot log shows the same -12 as before).
++
++include $(TOPDIR)/rules.mk
++
++PKG_NAME:=ipq-wifi-tplink_archer-ax23-v2
++PKG_RELEASE:=1
++PKG_FLAGS:=nonshared
++
++include $(INCLUDE_DIR)/package.mk
++
++BDF_2G:=$(CURDIR)/files/board-tplink_archer-ax23-v2.ipq5018
++BDF_5G:=$(CURDIR)/files/board-tplink_archer-ax23-v2.qcn6122
++
++define Package/ipq-wifi-tplink_archer-ax23-v2
++  SECTION:=firmware
++  CATEGORY:=Firmware
++  DEPENDS:=@TARGET_qualcommax
++  TITLE:=board-2.bin for TP-Link Archer AX23 v2 (locally supplied)
++endef
++
++define Build/Compile
++endef
++
++define Package/ipq-wifi-tplink_archer-ax23-v2/install
++	$(INSTALL_DIR) $(1)/lib/firmware/ath11k/IPQ5018/hw1.0 \
++		$(1)/lib/firmware/ath11k/QCN6122/hw1.0
++	if [ -f "$(BDF_2G)" ] && [ -f "$(BDF_5G)" ]; then \
++		$(INSTALL_DATA) $(BDF_2G) $(1)/lib/firmware/ath11k/IPQ5018/hw1.0/board-2.bin; \
++		$(INSTALL_DATA) $(BDF_5G) $(1)/lib/firmware/ath11k/QCN6122/hw1.0/board-2.bin; \
++	else \
++		echo "WARNING: AX23 v2 board data not supplied; Wi-Fi will not start" >&2; \
++		echo "AX23 v2 board data was not supplied at build time." \
++			> $(1)/lib/firmware/ath11k/AX23-V2-BOARD-DATA-MISSING; \
++	fi
++endef
++
++$(eval $(call BuildPackage,ipq-wifi-tplink_archer-ax23-v2))
+diff --git a/package/firmware/ipq-wifi-tplink-archer-ax23-v2/files/.keep b/package/firmware/ipq-wifi-tplink-archer-ax23-v2/files/.keep
+new file mode 100644
+index 0000000000..e69de29bb2
+diff --git a/target/linux/qualcommax/image/ipq50xx.mk b/target/linux/qualcommax/image/ipq50xx.mk
+index 1f87bd16f3..b6f4997fe4 100644
+--- a/target/linux/qualcommax/image/ipq50xx.mk
++++ b/target/linux/qualcommax/image/ipq50xx.mk
+@@ -294,6 +294,7 @@ define Device/tplink_archer-ax23-v2
+ 	IMAGE_SIZE := 54784k
+ 	NAND_SIZE := 128m
+ 	DEVICE_PACKAGES := ath11k-firmware-ipq5018-qcn6122 \
++		ipq-wifi-tplink_archer-ax23-v2 \
+ 		kmod-dsa-rtl8365mb
+ ifneq ($(CONFIG_TARGET_ROOTFS_INITRAMFS),)
+ ifeq ($(IB),)

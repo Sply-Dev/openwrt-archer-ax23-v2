@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
+Date: Sat, 21 Nov 2026 07:07:54 +0000
+Subject: [PATCH] base-files: caldata: fix ath11k_remove_regdomain without
+ target
+
+ath11k_remove_regdomain() reads the regdomain with hexdump from $target,
+but every caller in qualcommax 11-ath11k-caldata invokes it without an
+argument. hexdump then reads stdin, the comparison in the loop becomes
+'"" == ""' and the four candidate offsets (0x450/0x458/0x500/0x5a8)
+are overwritten with 0000 whether or not they hold a regdomain copy.
+
+Default $target to /lib/firmware/$FIRMWARE, as caldata_patch_data()
+already does. Only the RAM copy of the caldata is affected; flash (ART)
+is never written by this code.
+
+Regression test: AX23_V2_OPENWRT tests/unit/test_caldata_regdomain.sh
+---
+ package/base-files/files/lib/functions/caldata.sh | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/package/base-files/files/lib/functions/caldata.sh b/package/base-files/files/lib/functions/caldata.sh
+index f0fc907aef..8304a3a573 100644
+--- a/package/base-files/files/lib/functions/caldata.sh
++++ b/package/base-files/files/lib/functions/caldata.sh
+@@ -199,6 +199,12 @@ ath11k_remove_regdomain() {
+ 	local regdomain
+ 	local regdomain_data
+ 
++	# Callers in 11-ath11k-caldata pass no target. Without this default,
++	# hexdump below reads stdin instead of the caldata file, "$regdomain"
++	# and "$regdomain_data" are both empty and every offset in the loop
++	# is zeroed unconditionally.
++	[ -n "$target" ] || target=/lib/firmware/$FIRMWARE
++
+ 	regdomain=$(hexdump -v -n 2 -s 0x34 -e '1/1 "%02x"' $target)
+ 	caldata_patch_data "0000" 0x34 0xa "$target"
+ 	
