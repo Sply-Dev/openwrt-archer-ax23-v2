@@ -15,14 +15,23 @@ MAC patching offsets follow the same convention as the AX55 v1:
   2.4 GHz: label_mac - 1
   5 GHz:   label_mac - 2
 
+Do not call ath11k_remove_regdomain on this board: direct byte inspection
+of the physical 0:ART partition dumps (bdf-ipq5018-unit.bin at +0x1000 and
+bdf-qcn6122-unit.bin at +0x26800) and the OEM regional board files
+(bdwlan.b24 / bdwlan.b60) confirms that offset 0x34 is already 0x0000 from
+the factory, while candidate offsets 0x458 (0xaff9 on 2.4 GHz) and 0x5a8
+(0x00e1 on 5 GHz) hold non-regdomain BDF data. Furthermore, the OEM preinit
+script (/lib/read_caldata_to_fs.sh, ap-mp02.1* case) passes the 128 KiB
+0:ART slices raw without zeroing any regdomain offsets.
+
 Signed-off-by: Sply-Dev <206945494+Sply-Dev@users.noreply.github.com>
 ---
- .../etc/hotplug.d/firmware/11-ath11k-caldata        | 14 ++++++++++++++
- 1 file changed, 14 insertions(+)
+ .../etc/hotplug.d/firmware/11-ath11k-caldata        | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
 
 --- a/target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
 +++ b/target/linux/qualcommax/ipq50xx/base-files/etc/hotplug.d/firmware/11-ath11k-caldata
-@@ -65,6 +65,13 @@ case "$FIRMWARE" in
+@@ -65,6 +65,12 @@ case "$FIRMWARE" in
  		ath11k_set_macflag
  		ath11k_remove_regdomain
  		;;
@@ -31,12 +40,11 @@ Signed-off-by: Sply-Dev <206945494+Sply-Dev@users.noreply.github.com>
 +		label_mac=$(get_mac_binary "/tmp/tp_data/default-mac" 0)
 +		[ -n "$label_mac" ] && ath11k_patch_mac "$(macaddr_add "$label_mac" -1)" 0
 +		ath11k_set_macflag
-+		ath11k_remove_regdomain
 +		;;
  	tplink,eap650-outdoor-v1)
  		caldata_from_file "/tmp/factory_data/radio" 0 0x20000
  		label_mac=$(get_mac_binary /tmp/factory_data/default-mac 0)
-@@ -134,6 +141,13 @@ case "$FIRMWARE" in
+@@ -134,6 +140,12 @@ case "$FIRMWARE" in
  		[ -n "$label_mac" ] && ath11k_patch_mac "$(macaddr_add "$label_mac" -2)" 0
  		ath11k_set_macflag
  		;;
@@ -45,7 +53,6 @@ Signed-off-by: Sply-Dev <206945494+Sply-Dev@users.noreply.github.com>
 +		label_mac=$(get_mac_binary "/tmp/tp_data/default-mac" 0)
 +		[ -n "$label_mac" ] && ath11k_patch_mac "$(macaddr_add "$label_mac" -2)" 0
 +		ath11k_set_macflag
-+		ath11k_remove_regdomain
 +		;;
  	tplink,archer-ax55-v1)
  		caldata_extract "0:ART" 0x26800 0x20000

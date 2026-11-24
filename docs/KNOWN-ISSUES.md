@@ -38,15 +38,40 @@ ruling out a register-offset mismatch as the source of the earlier `0x6642` vs
 **Hardware confirmation:** The `rtl8365mb` driver probes and identifies the switch
 over MDIO as `RTL8367S-VB` on physical hardware boots (v0.2 through v0.4-3).
 
-## 2. ath11k / Q6 calibration and board data
+## 2. ath11k / Q6 calibration, board data (`-12`), and regdomain handling
 
-`[OPEN]` Wi-Fi compatibility was outside early testing scope.
-Calibration data offsets in `0:ART` (`0x1000` for the IPQ5018 2.4 GHz radio, and
-`0x26800` for the QCN6122 5 GHz radio, 128KB each) were confirmed bit-for-bit
-against raw hardware partition dumps and OEM scripts (`/lib/read_caldata_to_fs.sh`).
-However, during kernel boot the `ath11k` driver fails to fetch board data
-(QMI board file error `-12`, `failed to fetch board-2.bin`). The exact root cause
-of the board-file mismatch remains to be investigated.
+**Status:** `[VERIFIED]` root cause of the `-12` board-file error and `ath11k_remove_regdomain` corruption proven by rootfs/kernel source trace and byte-level inspection of physical `0:ART` dumps (`v0.6-wifi-integration`); `[OPEN]` physical hardware boot of the integrated `v0.6-wifi-integration` image to confirm dual-radio initialization and RF performance.
+
+### 2.1. Root cause of the QMI board-file fetch `-12` (`-ENOMEM`) error (`[VERIFIED]`)
+
+In builds v0.1 through v0.5, both radios reached the QMI board-data request stage during boot and failed with `failed to fetch board-2.bin` / `qmi failed to fetch board file: -12`. Tracing the compiled `root-qualcommax` filesystem and kernel 6.18 firmware-loader path confirms this was **not** a RAM allocation shortage:
+
+1. **No `board-2.bin` was installed in the rootfs:** `target/linux/qualcommax/image/ipq50xx.mk` only listed `ath11k-firmware-ipq5018-qcn6122` (which installs `q6_fw.*` and `m3_fw.*`), with no `ipq-wifi-*` package for `tplink_archer-ax23-v2`. Consequently, `/lib/firmware/ath11k/IPQ5018/hw1.0/board-2.bin` and `/lib/firmware/ath11k/QCN6122/hw1.0/board-2.bin` were physically absent from the image.
+2. **Why a missing file returns `-12` (`-ENOMEM`) instead of `-2` (`-ENOENT`):** When `ath11k_core_fetch_board_data_api_n()` calls `firmware_request_nowarn()`, the missing file triggers the kernel's sysfs user-helper fallback (`CONFIG_FW_LOADER_USER_HELPER_FALLBACK=y`, `CONFIG_FW_LOADER_PAGED_BUF=y`). OpenWrt's `procd` (`plug/hotplug.c: handle_firmware()`) sees `stat()` fail and immediately writes `loading=1` followed by `loading=0` with zero data bytes. In Linux 6.18 (`drivers/base/firmware_loader/fallback.c:127-131`), closing a paged firmware buffer with zero bytes returns `-ENOMEM` (`-12`):
+   ```c
+   else if (fw_priv->is_paged_buf && !fw_priv->data)
+       retval = -ENOMEM;
+   ```
+3. **Selector format and TLV structure required by `ath11k` (`core.c`):**
+   - From the OEM FIT DTB (`ax23-oem-fit.dts`), the vendor QSDK `cnss2` driver defines `qcom,board_id = <0x24>` (decimal `36`) for IPQ5018 and `qcom,board_id = <0x60>` (decimal `96`) for QCN6122. In contrast, OpenWrt's `ath11k` queries the silicon OTP `board_id` over QMI (`255` / `0xff` when unprogrammed) and formats the lookup string in decimal (`qmi-board-id=%d`).
+   - `ath11k_core_parse_bd_ie_board()` requires a 20-byte padded header (`"QCA-ATH11K-BOARD\0\0\0\0"`), unpadded `strlen(boardname)` in `ATH11K_BD_IE_BOARD_NAME`, and **one separate outer `ATH11K_BD_IE_BOARD` TLV per selector name** (because the parser executes `goto out;` on the first `ATH11K_BD_IE_BOARD_NAME` mismatch inside an outer IE).
+   - **Resolution in `v0.6-wifi-integration`:** Patch `0015` adds `package/firmware/ipq-wifi-tplink-archer-ax23-v2` to `DEVICE_PACKAGES`, and `board2-builder-fixed.py` packages the 128 KiB BDFs into validated `board-2.bin` containers covering both `qmi-board-id=255` and `qmi-board-id=36` (IPQ5018) / `96` (QCN6122).
+
+### 2.2. Factory `0:ART` calibration vs. OEM rootfs `bdwlan.b24`/`b60`, and why `ath11k_remove_regdomain` must not run (`[VERIFIED]`)
+
+Calibration data offsets in `0:ART` (`0x1000` for the IPQ5018 2.4 GHz radio, and `0x26800` for the QCN6122 5 GHz radio, 131,072 bytes each) were confirmed bit-for-bit against raw hardware partition dumps (`bdf-ipq5018-unit.bin`, `bdf-qcn6122-unit.bin`) and the OEM script `/lib/read_caldata_to_fs.sh` (`ap-mp02.1*` case).
+
+Byte-by-byte comparison between the physical `0:ART` slices and the OEM rootfs regional board files (`EU/00000001/lib/firmware/IPQ5018/WIFI_FW/bdwlan.b24` and `qcn6122/bdwlan.b60`) established two critical facts:
+
+1. **Per-unit factory RF calibration resides in `0:ART`:** Exactly 25 bytes on 2.4 GHz (`0x000a..0x000b` checksum + 23 bytes in `0x01a00..0x01a1a`, `0x0e25b..0x0e26d`, `0x106f0`) and 93 bytes on 5 GHz (84 bytes against the `TW` variant) are populated with unit-specific calibration values in `0:ART` where the generic `bdwlan.b24`/`b60` templates in the stock squashfs are zeroed (`0x00`) or uncalibrated.
+2. **Offset `0x34` is already `0x0000` from the factory, while `0x458` and `0x5a8` hold non-regdomain BDF data:** Inspecting the five candidate offsets touched by OpenWrt's `ath11k_remove_regdomain()` (`package/base-files/files/lib/functions/caldata.sh`) across all regional `bdwlan` files and the physical `0:ART` dumps yields:
+   ```text
+   EU bdwlan.b24 / unit 2.4G 0:ART : 0x034=0000  0x450=0000  0x458=aff9  0x500=0000  0x5a8=0000
+   EU bdwlan.b60 / unit 5G   0:ART : 0x034=0000  0x450=0000  0x458=0000  0x500=0000  0x5a8=00e1
+   ```
+   - In unpatched OpenWrt, calling `ath11k_remove_regdomain` without a `$target` argument caused `hexdump` to read empty `stdin`, matching `"" == ""` on all four loop offsets and overwriting `0x458` (`0xaff9` -> `0x0000` on 2.4 GHz) and `0x5a8` (`0x00e1` -> `0x0000` on 5 GHz) while corrupting the BDF checksum at `0x0a`.
+   - Furthermore, the OEM `/lib/read_caldata_to_fs.sh` script extracts `0:ART` at `+4096` (`0x1000`) and `+157696` (`0x26800`) directly with `dd` and never zeroes any regdomain offset.
+   - **Resolution in `v0.6-wifi-integration`:** Patch `0001` (`11-ath11k-caldata`) no longer calls `ath11k_remove_regdomain` on `tplink,archer-ax23-v2`, and patch `0014` fixes the missing default `$target` in `caldata.sh`.
 
 ## 3. MAC address origin and U-Boot ART error
 
