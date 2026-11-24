@@ -73,6 +73,26 @@ Byte-by-byte comparison between the physical `0:ART` slices and the OEM rootfs r
    - Furthermore, the OEM `/lib/read_caldata_to_fs.sh` script extracts `0:ART` at `+4096` (`0x1000`) and `+157696` (`0x26800`) directly with `dd` and never zeroes any regdomain offset.
    - **Resolution in `v0.6-wifi-integration`:** Patch `0001` (`11-ath11k-caldata`) no longer calls `ath11k_remove_regdomain` on `tplink,archer-ax23-v2`, and patch `0014` fixes the missing default `$target` in `caldata.sh`.
 
+### 2.3. Live OEM firmware Wi-Fi baseline from physical hardware (`[VERIFIED]`)
+
+Direct shell inspection (`dmesg` and `iwconfig ath0 ath1`) on a physical Archer AX23 v2 running stock firmware confirms the reference behavior that `v0.6-wifi-integration` matches:
+
+1. **MAC derivation (`label_mac - 1` / `label_mac - 2`) and radio initialization order:**
+   - Base label MAC (`tp_data/default-mac`): `EC:B9:31:xx:xx:54` (default SSID suffix `_B854`).
+   - `ath0` (IPQ5018 2.4 GHz, `802.11axg`, `hw_mode: 29`): initializes first (`~45.4 s`), assigned MAC `EC:B9:31:xx:xx:53` (`label_mac - 1`), `Setting Max Stations: 128` (matching `fw_mem_mode = 2`).
+   - `ath1` (QCN6122 5 GHz, `802.11axa`, `hw_mode: 30`): initializes second (`~50.3 s`), assigned MAC `EC:B9:31:xx:xx:52` (`label_mac - 2`), `Setting Max Stations: 128`.
+2. **Stock driver confirmation that `0x34` regdomain is `0x0000` in BDF/ART:**
+   - On both radios, the stock QCA driver logs:
+     ```text
+     ol_ath_ucfg_setparam: Unable to set regdomain, restore orig_rd = 22
+     wlan_cfg80211_set_country: Country: US ret: 0
+     ```
+     confirming that the raw BDF/ART carries `0x0000` at offset `0x34` and the regulatory domain is applied via `cfg80211` country code at runtime.
+3. **Reference TX power and BDF noise floor (`iwconfig ath0` / `iwconfig ath1`):**
+   - `ath0` (2.4 GHz, channel 9 / `2.452 GHz`, HE40 `573.5 Mb/s`): **`Tx-Power: 24 dBm`**, **`Noise level: -101 dBm (BDF averaged NF value in dBm)`**.
+   - `ath1` (5 GHz, channel 149 / `5.745 GHz`, HE80 `1.201 Gb/s`): **`Tx-Power: 26 dBm`**, **`Noise level: -97 dBm (BDF averaged NF value in dBm)`**.
+   - These figures provide the exact hardware baseline to verify that `v0.6-wifi-integration` (using the `0:ART`-derived `board-2.bin` files) does not hit the `13 dBm` fallback cap observed when uncalibrated zero-filled `bdwlan` templates are used with `WLAN.HK.2.7.0.1-01744`.
+
 ## 3. MAC address origin and U-Boot ART error
 
 **Status:** `[RESOLVED]` by binary disassembly of vendor U-Boot (`appsbl.bin`),

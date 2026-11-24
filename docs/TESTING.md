@@ -24,7 +24,7 @@ historical review snapshots; this document tracks the active hardware validation
 | Direct WAN Connectivity | `[REPORTED]` | WAN negotiated 1Gbps/Full; ICMP ping to 1.1.1.1 successful from router with 0% loss (v0.4-2 / v0.4-3) |
 | Factory MAC Assignment | `[REPORTED]` | `tp_data` mounts automatically at preinit; factory MAC read from `default-mac` populates `br-lan` and `wan` (v0.4-3) |
 | LAN Client NAT Forwarding | `[REPORTED]` | Automatic DHCP, real web page loads and OpenSpeedTest from a LAN client: 444.95 Mbps down / 100.35 Mbps up, 12.0 ms ping, 1.00 ms jitter. Source: Veraxis, 2026-11-20 (v0.5) |
-| Wi-Fi (2.4 GHz & 5 GHz) | `[OPEN]` | Caldata offsets verified against dump; driver blocked on board-data fetch error `-12` |
+| Wi-Fi (2.4 GHz & 5 GHz) | `[OPEN]` (staged in `v0.6-wifi-integration`) | Root cause of `-12` and `0:ART` regdomain (`0x34=0x0000`) `[VERIFIED]`; stock baseline measured at `24 dBm` (2.4G, NF `-101 dBm`) and `26 dBm` (5G, NF `-97 dBm`); awaiting `v0.6` RAM boot |
 | Persistent Flash Install | `[OPEN]` | Non-persistent RAM boot only; `platform.sh` dual-boot A/B handling unvalidated |
 
 ## Hardware test log by release
@@ -106,9 +106,13 @@ This is not a blocker.
 
 ## Remaining validation items
 
-### 1. Wi-Fi radio bring-up (`ath11k`)
-- While caldata extraction offsets (`0x1000` for IPQ5018 and `0x26800` for QCN6122 in `0:ART`) have been verified bit-for-bit against hardware dumps, the ath11k driver fails to fetch board data with error `-12`.
-- Investigation of the `board-2.bin` variant lookup string and board ID is needed.
+### 1. Wi-Fi radio bring-up (`ath11k`, `v0.6-wifi-integration`)
+- **Root cause of `-12` resolved in staging (`[VERIFIED]`):** Earlier builds had no `ipq-wifi` package installed for `tplink_archer-ax23-v2`, causing `firmware_loader/fallback.c` to return `-ENOMEM` (`-12`) when `procd` closed the paged firmware sysfs request with 0 bytes. Patch `0015` adds `ipq-wifi-tplink_archer-ax23-v2`, and `board2-builder-fixed.py` generates validated `board-2.bin` containers (with separate outer `ATH11K_BD_IE_BOARD` TLVs for `qmi-board-id=255` and decimal `36`/`96`) from the physical `0:ART` dumps (`bdf-ipq5018-unit.bin` / `bdf-qcn6122-unit.bin`).
+- **Low-memory `ath11k` rings and Q6 multi-PD recovery (`[VERIFIED]` host models):** Patches `0007`–`0013` reduce FW memory mode 2 RX/TX completion rings, eliminate DMA ring alignment slack (`1,184 KiB` per radio, max order 6), unwind partial DP startup failures, and coordinate Q6 root/user-PD crash recovery (including the `rproc_shutdown()`/`RPROC_CRASHED` refcount fix).
+- **Physical hardware baseline to compare against on first `v0.6` RAM boot (`[VERIFIED]` on stock firmware):**
+  - `ath0` (IPQ5018 2.4 GHz): MAC `label_mac - 1`, `Max Stations: 128`, `Country: US`, **`Tx-Power: 24 dBm`**, **`BDF averaged NF: -101 dBm`** (`802.11axg`, HE40 `573.5 Mb/s`).
+  - `ath1` (QCN6122 5 GHz): MAC `label_mac - 2`, `Max Stations: 128`, `Country: US`, **`Tx-Power: 26 dBm`**, **`BDF averaged NF: -97 dBm`** (`802.11axa`, HE80 `1.201 Gb/s`).
+  - On first `v0.6` RAM boot, verify that both PHYs register in `iw phy`, check `free -m` / `dmesg` for zero DMA allocation failures, and confirm via `iw dev` that TX power is not capped at `13 dBm`.
 
 ### 2. Persistent NAND installation
 - Flash installation remains unauthorized until dual-boot A/B slot selection (`fw_setenv tp_boot_idx`) is implemented in `platform.sh` and verified safe against bricking.
