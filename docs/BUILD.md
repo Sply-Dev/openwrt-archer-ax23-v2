@@ -45,12 +45,11 @@ This port includes the ten-patch **net-next v7** series for the Realtek RTL8365M
 
 The series introduces chip-family infrastructure, adds RTL8367S-VB support, and includes family-D-specific functionality such as speed configuration, RGMII configuration, VLAN handling, SDS13 PCS support, SerDes re-latching, and L2 LUT access.
 
-Apply all ten patches:
+Copy all ten kernel patches into `target/linux/generic/pending-6.18/`:
 
 ```sh
-for p in /path/to/ax23v2-public/target/linux/generic/pending-6.18/777-*.patch; do
-    patch -p1 < "$p"
-done
+cp /path/to/ax23v2-public/target/linux/generic/pending-6.18/777-*.patch \
+   target/linux/generic/pending-6.18/
 ```
 
 The patches must be applied to the matching upstream source revision specified in Section 1. In this project, the pre-v7 and v7 labels refer to the same series used for the documented builds; v9 and v10 have not been incorporated or tested here.
@@ -185,4 +184,43 @@ Read `TESTING.md` before attempting any hardware testing.
 - **Leftover patch files in preinit:** As noted above, never leave `.orig` or backup files in `base-files/lib/preinit/` as the OpenWrt preinit sequence will blindly source them.
 - The `rtl8365mb` switch driver is built directly into the kernel in the tested configuration, not as a loadable module. The applied net-next v7 series contains support for multiple chip families; the presence of RTL8367S-VB support in the driver does not establish that this specific hardware configuration has been validated.
 - `CONFIG_SERIAL_AMBA_PL011` / `_CONSOLE` were enabled in `target/linux/qualcommax/config-6.18` specifically to allow booting the initramfs image under QEMU's `virt` machine for userspace-level smoke testing. **This does not exercise the IPQ5018 SoC, RTL8367 switch, NAND, or either radio.** A QEMU boot only demonstrates that the initramfs userspace itself is not broken. See `TESTING.md`.
-- Wi-Fi compatibility was deliberately outside current testing scope. While caldata offsets (0x1000 for IPQ5018 and 0x26800 for QCN6122 in `0:ART`) have been confirmed bit-for-bit against hardware dumps, the current ath11k driver fails to fetch board-data with error `-12`. See `docs/KNOWN-ISSUES.md`, Section 2.
+- Wi-Fi compatibility was deliberately outside early testing scope (v0.1 through v0.5). While caldata offsets (0x1000 for IPQ5018 and 0x26800 for QCN6122 in `0:ART`) were confirmed bit-for-bit against hardware dumps, earlier builds lacked `board-2.bin` packages and low-memory `ath11k` ring sizing. See the `v0.6-wifi-integration` section below and `docs/KNOWN-ISSUES.md`, Section 2.
+
+## 6. `v0.6-wifi-integration`: UNIPHY preconfig (`0006`) and Wi-Fi / Q6 recovery series (`0007`–`0017`)
+
+After applying patches `0001` through `0005` and adding the device definition snippet to `target/linux/qualcommax/image/ipq50xx.mk` (Section 2), apply the v0.5 UNIPHY PCS preconfiguration patch (`0006`) and the `v0.6-wifi-integration` patches (`0007` through `0017`) at the OpenWrt source root:
+
+```sh
+git apply --check /path/to/ax23v2-public/patches/0006-qualcommax-ipq50xx-uniphy-pcs-preconfig.patch && \
+git apply /path/to/ax23v2-public/patches/0006-qualcommax-ipq50xx-uniphy-pcs-preconfig.patch
+
+for p in /path/to/ax23v2-public/patches/000{7..9}-*.patch \
+         /path/to/ax23v2-public/patches/001{0..7}-*.patch; do
+    git apply --check "$p" && git apply "$p"
+done
+```
+
+### Supplying local `board-2.bin` files for `ipq-wifi-tplink_archer-ax23-v2` (patch `0015`)
+
+Patch `0015` creates `package/firmware/ipq-wifi-tplink-archer-ax23-v2/` and adds `ipq-wifi-tplink_archer-ax23-v2` to `DEVICE_PACKAGES`. Because board calibration / BDF payloads are proprietary and not stored in this repository, generate the two `board-2.bin` files locally (covering both `qmi-board-id=255` and the decimal stock selectors `36` for IPQ5018 / `96` for QCN6122, with separate outer `ATH11K_BD_IE_BOARD` TLVs per selector) and place them at:
+
+```sh
+cp /path/to/board-2-ipq5018-FINAL.bin \
+   package/firmware/ipq-wifi-tplink-archer-ax23-v2/files/board-tplink_archer-ax23-v2.ipq5018
+cp /path/to/board-2-qcn6122-FINAL.bin \
+   package/firmware/ipq-wifi-tplink-archer-ax23-v2/files/board-tplink_archer-ax23-v2.qcn6122
+```
+
+### Host-side regression checks (`tests/host/`)
+
+Before or after compiling `target/linux` and `package/kernel/mac80211`, the host-model unit and regression checks can be run against the prepared kernel and backports sources:
+
+```sh
+python3 /path/to/ax23v2-public/tests/host/check_ath11k_ring_alloc.py \
+    build_dir/target-*/linux-qualcommax_ipq50xx/mac80211-*/backports-*/drivers/net/wireless/ath/ath11k/dp.c
+python3 /path/to/ax23v2-public/tests/host/check_ath11k_cleanup.py \
+    build_dir/target-*/linux-qualcommax_ipq50xx/mac80211-*/backports-*/drivers/net/wireless/ath/ath11k/dp.c
+python3 /path/to/ax23v2-public/tests/host/check_mpd_recovery.py \
+    build_dir/target-*/linux-qualcommax_ipq50xx/linux-*/drivers/remoteproc/qcom_q6v5_mpd.c
+python3 -m unittest discover -s /path/to/ax23v2-public/tests/host -p 'test_*.py'
+```

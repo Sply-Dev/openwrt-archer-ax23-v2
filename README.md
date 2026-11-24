@@ -16,9 +16,12 @@ AX23 v1, which is MediaTek MT7621-based and already officially supported by Open
 > Test source: Veraxis, physical hardware, 2026-11-20. See
 > [`docs/TESTING.md`](docs/TESTING.md) for the full test log.
 >
-> Patch `0006` is not part of this branch; it is under review in a separate draft PR.
-> Persistent installation to NAND flash and `sysupgrade` are not validated. Wi-Fi radio
-> operation (ath11k board-data error `-12`) and A/B boot handling remain unvalidated.
+> Patch `0006` (`qca_uniphy_pcs_preconfig()`) is now included in this tree. On the
+> `v0.6-wifi-integration` branch, patches `0007` through `0017` integrate the `ath11k`
+> low-memory / Q6 multi-PD recovery series (with the `wcss_pd_put_rpd()` refcount fix),
+> `caldata.sh` / `hostapd.uc` / `uboot-envtools` fixes, and the `ipq-wifi-tplink_archer-ax23-v2`
+> board-data package hook for hardware testing. Persistent installation to NAND flash and
+> `sysupgrade` remain unvalidated.
 
 
 <div align="center">
@@ -58,6 +61,8 @@ the EX511 v2 report does not validate this board.
 | `docs/KNOWN-ISSUES.md` | Open problems, unknowns, and licensing notes |
 | `docs/archer-ax23-v2-port-status.md` | Point-in-time status snapshot with evidence tags |
 | `docs/CREDITS.md` | Who wrote what - this project's own work vs. carried-in third-party patches |
+| `docs/CONTRIBUTION-INVENTORY.md` | Patch-by-patch disposition of the `v0.6-wifi-integration` series and the 27-patch reference tree |
+| `tests/host/` | Host-side `ath11k` and Q6 multi-PD source/model regression checks (not hardware tests) |
 | `target/` | DTS, image definition snippet, and carried-in switch driver patches for this device |
 | `patches/` | Locally maintained patches applied manually during the build, including ath11k caldata and AX23 v2 board defaults |
 
