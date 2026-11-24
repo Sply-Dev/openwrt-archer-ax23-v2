@@ -82,7 +82,7 @@ This measurement is corroborated by two further points:
   `MODE_EXT_HSGMII` with `PORT_SPEED_2500M` for this same link, and prints
   `"Set RTL8367S SGMII 2.5Gbps"` during bring-up.
 
-**Hardware validation:** On physical hardware running OpenWrt, the CPU link comes up cleanly at 2.5 Gbps (`Link is Up - 2.5Gbps/Full - flow control rx/tx`). Subsequent testing through v0.4-3 confirmed `br-lan` membership and LAN-to-LAN forwarding (v0.3), as well as physical WAN Gigabit negotiation and external connectivity from the router (v0.4-2 / v0.4-3). Client LAN-to-WAN NAT forwarding validation remains pending.
+**Hardware validation:** On physical hardware running OpenWrt, the CPU link comes up cleanly at 2.5 Gbps (`Link is Up - 2.5Gbps/Full - flow control rx/tx`). Subsequent testing through v0.5 confirmed `br-lan` membership and LAN-to-LAN forwarding (v0.3), physical WAN Gigabit negotiation and external connectivity from the router (v0.4-2 / v0.4-3), and cold-boot 2.5G trunk lock (3/3 cold boots, 2/2 soft reboots) plus LAN-to-WAN client NAT forwarding with DHCP at 444.95 Mbps down / 100.35 Mbps up (`[REPORTED]` in v0.5 by Veraxis).
 
 ### Switch node
 
@@ -119,11 +119,15 @@ adopted (replacing an earlier, less complete v1 revision of eight patches).
 - `ath11k-fw-memory-mode = 2` is set on **both** radios. This is required at 256MB of
   total RAM, higher-RAM devices on the same SoC can use a different mode.
 - Wi-Fi compatibility was deliberately outside early testing.
-- The published ath11k caldata hotplug patch extracts calibration data directly from
+- The published ath11k caldata hotplug patch (`0001`) extracts calibration data directly from
   `0:ART` at fixed offsets (`0x1000` for 2.4 GHz and `0x26800` for 5 GHz), which were
-  validated bit-for-bit against raw factory partitions extracted from hardware. However,
-  runtime radio initialization currently fails during ath11k board data fetching
-  (error `-12`); see `KNOWN-ISSUES.md` §2.
+  validated bit-for-bit against raw factory partitions extracted from hardware (`[VERIFIED]`),
+  without zeroing regdomain words (`0x34` is already `0x0000` in factory `0:ART`). In builds
+  v0.1-v0.5, runtime radio initialization failed during ath11k board-data fetching (error
+  `-12`) because no `board-2.bin` package was installed in the rootfs (`[VERIFIED]`). Build
+  `v0.6-test` adds `ipq-wifi-tplink_archer-ax23-v2` (`0015`) and low-memory `ath11k` / Q6
+  recovery patches (`0007`-`0016`); runtime radio operation on physical hardware remains
+  `[OPEN]` pending `v0.6-test` validation; see [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) Section 2.
 
 ## NAND and boot slot selection
 
@@ -160,5 +164,5 @@ hardware testing and forensics:
   See [`TESTING.md`](TESTING.md).
 
 **Remaining open items:**
-- Investigation of the ath11k board data fetch failure (error `-12`).
-- Persistent flash installation and dual-boot A/B handling via `platform.sh`.
+- Physical hardware validation of `v0.6-test` dual-radio Wi-Fi bring-up (`[OPEN]` on hardware; host-side `-12` rootfs fix and low-memory ring patches are `[VERIFIED]` in the compiled tree).
+- Persistent flash installation and dual-boot A/B handling via `platform.sh` (`[OPEN]`).

@@ -7,11 +7,12 @@ authors, so that credit lands where it belongs.
 
 - `target/linux/qualcommax/dts/ipq5018-archer-ax23-v2.dts` - device tree
 - `target/linux/qualcommax/image/ipq50xx-ax23v2-snippet.mk` - image definition
-- `patches/0001-add-tplink-archer-ax23-v2-caldata.patch` - ath11k caldata hotplug cases for this device
+- `patches/0001-add-tplink-archer-ax23-v2-caldata.patch` - ath11k caldata hotplug cases for this device (including `0:ART` regdomain preservation verified against factory partition dumps)
 - `patches/0002-add-tplink-archer-ax23-v2-network-defaults.patch` - AX23 v2 LAN/WAN interface roles
 - `patches/0003-add-tplink-archer-ax23-v2-label-mac.patch` - factory MAC address retrieval from tp_data
 - `patches/0004-add-tplink-archer-ax23-v2-tp-data-mount.patch` - preinit mount for tp_data UBIFS volume
 - `patches/0005-add-tplink-archer-ax23-v2-led-defaults.patch` - LAN/WAN netdev trigger defaults
+- Second-layer `rproc_shutdown()` / `RPROC_CRASHED` refcount fix folded into `patches/0012-q6-mpd-root-user-pd-recovery.patch` and scenario `S9` in `tests/host/check_mpd_recovery.py` (see [`CONTRIBUTION-INVENTORY.md`](CONTRIBUTION-INVENTORY.md))
 - All of `docs/` - written for this repository, except where it describes or
   quotes someone else's work (credited inline and here)
 
@@ -32,10 +33,11 @@ authors, so that credit lands where it belongs.
 
 - **Giannis (John, GitHub: `john35413`, `fitsiosjohn@gmail.com`)** - independent
   engineering work in `john35413/openwrt-archer-ax23-v2-build`, and PR #2 (ath11k
-  low-memory support and Q6 multi-PD recovery). These patches are carried in from that
-  work and are **not this project's own work**; authorship stays with their original
-  author and the headers in the patch files record it. The PR is under review in a
-  separate draft PR and is not part of this branch.
+  low-memory support and Q6 multi-PD recovery). Patches `0007` through `0017` and the
+  host-model verification scripts in `tests/host/` are carried in from that work (with
+  the `wcss_pd_put_rpd()` refcount fix folded into `0012`) and are **not this project's
+  own work**; authorship stays with their original author and the headers in the patch
+  files and [`CONTRIBUTION-INVENTORY.md`](CONTRIBUTION-INVENTORY.md) record it.
 
 ## Financial support
 

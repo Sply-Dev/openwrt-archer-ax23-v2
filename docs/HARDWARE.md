@@ -78,11 +78,11 @@ clocks were measured at 312.5 MHz. The OEM DTB says
 `2500base-x` with speed 2500 and `pause`. OpenWrt boot logs report
 the CPU link up at 2.5 Gbit/s full duplex with RX/TX flow control.
 
-**Hardware validation:** Physical testing through v0.4-3 confirmed:
-- Switch detection and CPU link up at 2.5 Gbps / Full.
-- LAN ports 1–4 operational under `br-lan` bridge with LAN-to-LAN packet forwarding (v0.3).
+**Hardware validation:** Physical testing through v0.5 confirmed:
+- Switch detection and CPU link up at 2.5 Gbps / Full (`[REPORTED]` in v0.5: trunk locks at 2.56 s after UNIPHY PCS preconfiguration, with 3/3 cold boots and 2/2 soft reboots clean).
+- LAN ports 1-4 operational under `br-lan` bridge with LAN-to-LAN packet forwarding (v0.3).
 - WAN port negotiating at 1Gbps/Full with successful external ICMP ping from the router (v0.4-2 / v0.4-3).
-- Client LAN-to-WAN NAT forwarding validation remains pending.
+- Client LAN-to-WAN NAT forwarding with automatic DHCP (`[REPORTED]` in v0.5 by Veraxis: 444.95 Mbps down / 100.35 Mbps up, 12.0 ms ping, 1.00 ms jitter).
 
 ## Radios
 
@@ -102,7 +102,7 @@ CA/default/lib/firmware/IPQ5018/WIFI_FW/qcn6122/bdwlan.b60   (128KB, 5GHz)
 ```
 
 The OEM `wifi_fw_mount` init script symlinks this `WIFI_FW/` directory to
-`/lib/firmware/IPQ5018/` at runtime. Offsets in the `ART` NAND partition (`0x1000` for 2.4 GHz and `0x26800` for 5 GHz) were confirmed bit-for-bit against hardware partition dumps. Runtime radio bring-up is currently blocked by ath11k failing to fetch board data (error `-12`).
+`/lib/firmware/IPQ5018/` at runtime. Offsets in the `ART` NAND partition (`0x1000` for 2.4 GHz and `0x26800` for 5 GHz) were confirmed bit-for-bit against hardware partition dumps (`[VERIFIED]`), which carry per-unit factory RF calibration bytes where the squashfs `bdwlan.b24`/`b60` templates are zero-filled. On stock firmware running on physical hardware (`[VERIFIED]`), `ath0` (2.4 GHz) reports `Tx-Power: 24 dBm` / `Noise level: -101 dBm` and `ath1` (5 GHz) reports `Tx-Power: 26 dBm` / `Noise level: -97 dBm`. In OpenWrt builds v0.1-v0.5, radio bring-up failed with QMI board-file error `-12` because no `board-2.bin` package was installed in the rootfs (`[VERIFIED]`). Build `v0.6-test` adds `ipq-wifi-tplink_archer-ax23-v2` and low-memory `ath11k` / Q6 recovery patches (`0007`-`0016`); whether this resolves radio initialization on physical hardware remains `[OPEN]` until `v0.6-test` is booted on a physical unit. See [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) Section 2.
 
 ## UART
 

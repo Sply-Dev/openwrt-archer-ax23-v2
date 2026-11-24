@@ -1,6 +1,6 @@
 # Build instructions
 
-These instructions describe how to reproduce the OpenWrt build for the TP-Link Archer AX23 v2. They cover **building the firmware images, not flashing them**. See `TESTING.md` for the current hardware-validation status. The port has been validated on physical hardware through v0.4-3 using initramfs booted from RAM via U-Boot/TFTP.
+These instructions describe how to reproduce the OpenWrt build for the TP-Link Archer AX23 v2. They cover **building the firmware images, not flashing them**. See `TESTING.md` for the current hardware-validation status. The port has been validated on physical hardware through v0.5 using initramfs booted from RAM via U-Boot/TFTP.
 
 ## Prerequisites
 
@@ -137,7 +137,7 @@ For an initramfs image intended for non-persistent testing, also enable:
 CONFIG_TARGET_ROOTFS_INITRAMFS=y
 ```
 
-**Hardware validation through v0.4-3 was conducted using the initramfs image booted from RAM.** See `TESTING.md` for the full test results and remaining items.
+**Hardware validation through v0.5 was conducted using the initramfs image booted from RAM.** See `TESTING.md` for the full test results and remaining items.
 
 ## 4. Build
 
@@ -171,7 +171,7 @@ openwrt-qualcommax-ipq50xx-tplink_archer-ax23-v2.manifest
 
 **Generating an image does not mean that it is safe to flash.**
 
-The port has been validated in hardware through v0.4-3 via non-persistent initramfs RAM boots (loaded via U-Boot/TFTP). Persistent NAND installation has not been validated.
+The port has been validated in hardware through v0.5 via non-persistent initramfs RAM boots (loaded via U-Boot/TFTP). Persistent NAND installation has not been validated.
 
 - The `squashfs-factory.ubi` and `squashfs-sysupgrade.bin` images are **not authorized for flashing**.
 - Do not write any generated image to NAND or attempt a persistent installation. Dual-boot A/B partition switching (`tp_boot_idx`) is not yet implemented or tested in `platform.sh`.

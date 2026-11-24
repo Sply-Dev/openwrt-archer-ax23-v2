@@ -40,7 +40,7 @@ over MDIO as `RTL8367S-VB` on physical hardware boots (v0.2 through v0.4-3).
 
 ## 2. ath11k / Q6 calibration, board data (`-12`), and regdomain handling
 
-**Status:** `[VERIFIED]` root cause of the `-12` board-file error and `ath11k_remove_regdomain` corruption proven by rootfs/kernel source trace and byte-level inspection of physical `0:ART` dumps (`v0.6-wifi-integration`); `[OPEN]` physical hardware boot of the integrated `v0.6-wifi-integration` image to confirm dual-radio initialization and RF performance.
+**Status:** `[VERIFIED]` host-side root cause of the `-12` board-file error and `ath11k_remove_regdomain` corruption proven by rootfs/kernel source trace and byte-level inspection of physical `0:ART` dumps (`v0.6-test`); `[OPEN]` (unverified on hardware) physical hardware boot of the integrated `v0.6-test` image to confirm whether dual-radio initialization and RF performance work on the device.
 
 ### 2.1. Root cause of the QMI board-file fetch `-12` (`-ENOMEM`) error (`[VERIFIED]`)
 
@@ -55,7 +55,7 @@ In builds v0.1 through v0.5, both radios reached the QMI board-data request stag
 3. **Selector format and TLV structure required by `ath11k` (`core.c`):**
    - From the OEM FIT DTB (`ax23-oem-fit.dts`), the vendor QSDK `cnss2` driver defines `qcom,board_id = <0x24>` (decimal `36`) for IPQ5018 and `qcom,board_id = <0x60>` (decimal `96`) for QCN6122. In contrast, OpenWrt's `ath11k` queries the silicon OTP `board_id` over QMI (`255` / `0xff` when unprogrammed) and formats the lookup string in decimal (`qmi-board-id=%d`).
    - `ath11k_core_parse_bd_ie_board()` requires a 20-byte padded header (`"QCA-ATH11K-BOARD\0\0\0\0"`), unpadded `strlen(boardname)` in `ATH11K_BD_IE_BOARD_NAME`, and **one separate outer `ATH11K_BD_IE_BOARD` TLV per selector name** (because the parser executes `goto out;` on the first `ATH11K_BD_IE_BOARD_NAME` mismatch inside an outer IE).
-   - **Resolution in `v0.6-wifi-integration`:** Patch `0015` adds `package/firmware/ipq-wifi-tplink-archer-ax23-v2` to `DEVICE_PACKAGES`, and `board2-builder-fixed.py` packages the 128 KiB BDFs into validated `board-2.bin` containers covering both `qmi-board-id=255` and `qmi-board-id=36` (IPQ5018) / `96` (QCN6122).
+   - **Host-side resolution in `v0.6-test` (`[VERIFIED]` in compiled rootfs; `[OPEN]` on physical hardware):** Patch `0015` adds `package/firmware/ipq-wifi-tplink-archer-ax23-v2` to `DEVICE_PACKAGES`, and `board2-builder-fixed.py` packages the 128 KiB BDFs into validated `board-2.bin` containers covering both `qmi-board-id=255` and `qmi-board-id=36` (IPQ5018) / `96` (QCN6122). Both files (`f4fa2571...` and `eaed9cac...`) are verified embedded in the compiled `v0.6-test` `root-qualcommax`; physical hardware verification remains `[OPEN]`.
 
 ### 2.2. Factory `0:ART` calibration vs. OEM rootfs `bdwlan.b24`/`b60`, and why `ath11k_remove_regdomain` must not run (`[VERIFIED]`)
 
