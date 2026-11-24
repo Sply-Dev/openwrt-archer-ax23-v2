@@ -16,9 +16,14 @@ AX23 v1, which is MediaTek MT7621-based and already officially supported by Open
 > Test source: Veraxis, physical hardware, 2026-11-20. See
 > [`docs/TESTING.md`](docs/TESTING.md) for the full test log.
 >
-> Patch `0006`(or `0007`) is not part of this branch; it is under review in a separate draft PR.
-> Persistent installation to NAND flash and `sysupgrade` are not validated. Wi-Fi radio
-> operation (ath11k board-data error `-12`) and A/B boot handling remain unvalidated.
+> Patch `0006` (`qca_uniphy_pcs_preconfig()`) is included in this tree. For `v0.6-test`,
+> patches `0007` through `0017` integrate the `ath11k` low-memory / Q6 multi-PD recovery
+> series (with the `wcss_pd_put_rpd()` refcount fix), `caldata.sh` / `hostapd.uc` /
+> `uboot-envtools` fixes, and the `ipq-wifi-tplink_archer-ax23-v2` board-data package hook.
+> The host-side rootfs gap behind the earlier `-12` (`-ENOMEM`) board-file error and the
+> `0:ART` regdomain layout are `[VERIFIED]` by source and partition-dump inspection; runtime
+> Wi-Fi operation on physical hardware remains `[OPEN]` pending `v0.6-test` RAM-boot testing.
+> Persistent installation to NAND flash and `sysupgrade` remain unvalidated.
 
 
 <div align="center">
@@ -58,6 +63,8 @@ the EX511 v2 report does not validate this board.
 | `docs/KNOWN-ISSUES.md` | Open problems, unknowns, and licensing notes |
 | `docs/archer-ax23-v2-port-status.md` | Point-in-time status snapshot with evidence tags |
 | `docs/CREDITS.md` | Who wrote what - this project's own work vs. carried-in third-party patches |
+| `docs/CONTRIBUTION-INVENTORY.md` | Patch-by-patch disposition of the `v0.6-wifi-integration` series and the 27-patch reference tree |
+| `tests/host/` | Host-side `ath11k` and Q6 multi-PD source/model regression checks (not hardware tests) |
 | `target/` | DTS, image definition snippet, and carried-in switch driver patches for this device |
 | `patches/` | Locally maintained patches applied manually during the build, including ath11k caldata and AX23 v2 board defaults |
 
@@ -87,7 +94,7 @@ vendor-supplied kernel module.
 | Boot | Confirmed on physical hardware through v0.5 via U-Boot/TFTP (RAM boot only). Persistent installation to flash and `sysupgrade` remain unvalidated |
 | Ethernet switch (RTL8367 family D) | Switch detected and initialized successfully. CPU link established at 2.5 Gbps (HSGMII trunk confirmed from four independent sources). `br-lan` membership and LAN-to-LAN forwarding confirmed on physical hardware (v0.3). Direct WAN external connectivity confirmed on physical hardware through successful external ping tests from the router (v0.4-2 / v0.4-3). `[REPORTED]` in v0.5 (Veraxis, physical hardware, 2026-11-20): the 2.5G trunk locks at 2.56 s and stays stable, with 3/3 cold boots and 2/2 soft reboots clean after the UNIPHY PCS preconfiguration. LAN-to-WAN client routing with DHCP confirmed. Formal multi-client throughput testing (iperf3) has not been done |
 | Default network roles | Factory MAC retrieval and network interface assignment implemented and verified on physical hardware (v0.4-3). Following the preinit mount fix, `tp_data` is automatically mounted and the factory MAC from `default-mac` is correctly assigned to `br-lan` and `wan` (MAC+1), matching the router label |
-| 2.4 GHz and 5 GHz Wi-Fi | Board-data loading fails with error `-12` in current builds; root cause unknown. Radio operation is unvalidated |
+| 2.4 GHz and 5 GHz Wi-Fi | Board-data loading failed with error `-12` (`-ENOMEM`) in v0.1-v0.5. Source and rootfs inspection `[VERIFIED]` that those images shipped no `board-2.bin` for this device (triggering the kernel firmware user-helper fallback, which returns `-ENOMEM` when closed with 0 bytes) and that `0:ART` offset `0x34` is already `0x0000` from the factory. `v0.6-test` integrates `ipq-wifi-tplink_archer-ax23-v2`, low-memory `ath11k` ring sizing (`0007`-`0011`, `0013`), Q6 multi-PD recovery (`0012`), and regdomain preservation (`0001`, `0014`). Runtime radio bring-up on physical hardware remains `[OPEN]` (unverified on hardware) pending `v0.6-test` testing |
 | LEDs / buttons | All 7 LED nodes confirmed `GPIO_ACTIVE_HIGH` from live OEM device tree. LAN and WAN `netdev` link/activity triggers confirmed working on physical hardware (v0.4-2). Amber WAN LED connectivity logic (OEM `ledctrl` daemon) is a known limitation - not implemented |
 | MAC address assignment | Resolved and verified on physical hardware (v0.4-3). U-Boot leaves ART MAC fields as erased flash (`0xFF`). Factory MAC resides in `tp_data/default-mac`; preinit script mounts `tp_data` automatically at boot, correctly populating `br-lan` and `wan` without manual intervention |
 

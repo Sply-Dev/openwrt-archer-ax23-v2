@@ -1,7 +1,7 @@
 # TP-Link Archer AX23 v2 - OpenWrt port status
 
 Status document for the `tplink_archer-ax23-v2` device (target `qualcommax/ipq50xx`).
-Snapshot date: 2026-10-17. Current post-snapshot update: 2026-11-20.
+Snapshot date: 2026-10-17. Current post-snapshot update: 2026-11-24.
 
 > **Snapshot status on 2026-10-17:** a functional boot on physical hardware had not yet been demonstrated.
 > The original audit below records the state on that date. Later hardware results
@@ -98,6 +98,47 @@ Snapshot date: 2026-10-17. Current post-snapshot update: 2026-11-20.
 > - **Milestones:** M1 and M2 remain achieved; M2 now includes cold-boot stability.
 >   M3 (Wi-Fi) remains blocked on ath11k board-data error `-12`. M4 remains open.
 > - Optional future work, not a blocker: formal multi-client throughput (iperf3).
+>
+> **Post-snapshot update (2026-11-24, v0.6-test Wi-Fi integration & host build verification):**
+> - **Root cause of `-12` (`-ENOMEM`) and `0:ART` regdomain layout `[VERIFIED]` on host:**
+>   Inspection of the v0.1-v0.5 `root-qualcommax` directory and Linux 6.18
+>   `drivers/base/firmware_loader/fallback.c` confirmed that `-12` was returned because
+>   no `board-2.bin` existed in `/lib/firmware/ath11k/{IPQ5018,QCN6122}/hw1.0/`, causing
+>   `procd`'s firmware hotplug helper to close the paged sysfs request with 0 bytes.
+>   Byte-level comparison of physical `0:ART` dumps (`bdf-ipq5018-unit.bin` at `+0x1000`,
+>   `bdf-qcn6122-unit.bin` at `+0x26800`) against OEM `bdwlan.b24`/`b60` templates also
+>   confirmed that offset `0x34` is already `0x0000` from the factory, while `0x458`
+>   (`0xaff9` on 2.4 GHz) and `0x5a8` (`0x00e1` on 5 GHz) hold non-regdomain BDF data that
+>   the OEM `/lib/read_caldata_to_fs.sh` script preserves untouched.
+> - **Patch series `0007`-`0017` and `0001` update integrated and compiled (`[VERIFIED]` on host; `[OPEN]` on physical hardware):**
+>   - `0001` updated to drop `ath11k_remove_regdomain` for `tplink,archer-ax23-v2`; `0014`
+>     defaults `$target` in `caldata.sh`.
+>   - `0007`-`0011` and `0013` (`ath11k` patches `960`-`965`) size RX and TX completion
+>     rings for `fw_mem_mode == 2` (`1,184 KiB` ring DMA per radio, max page order 6),
+>     request exact DMA ring byte sizes without `+7` alignment slack, and unwind partial
+>     DP startup failures.
+>   - `0012` (`0821-remoteproc-qcom_q6v5_mpd-recover-user-PDs-with-the-root-PD.patch`)
+>     coordinates Q6 root-PD and user-PD crash recovery and incorporates the second-layer
+>     `wcss_pd_put_rpd()` / `RPROC_CRASHED` refcount fix.
+>   - `0015` adds `package/firmware/ipq-wifi-tplink-archer-ax23-v2` to `DEVICE_PACKAGES`;
+>     `0016` prevents a world `'00'` country code from breaking `hostapd`; `0017` adds
+>     `tplink,archer-ax23-v2` (`0:APPSBLENV`) to `uboot-envtools`.
+> - **`v0.6-test` build artifacts and host regression checks (`[VERIFIED]`):**
+>   - Embedded `root-qualcommax` `board-2.bin` SHA-256:
+>     - `IPQ5018/hw1.0/board-2.bin` (262,352 B): `f4fa2571f65ad06308add624cca5393aabbf344d562c5b0d8d8df25deb7598ff`
+>     - `QCN6122/hw1.0/board-2.bin` (262,352 B): `eaed9cac33f2f49f0a5514c8bdbba1aa3f534540c7630dcb22eb36cc66347e8f`
+>   - Compiled `v0.6-test` image SHA-256 (built 2026-11-24 18:21 UTC):
+>     - `openwrt-qualcommax-ipq50xx-tplink_archer-ax23-v2-initramfs-uImage.itb`: `e1254b3627d692529721f112777eee8ee57be38a4b8f925f55f66b71fe4ba6ef`
+>     - `openwrt-qualcommax-ipq50xx-tplink_archer-ax23-v2-initramfs-factory.ubi`: `77958d2f32edd82d0c58ce6c97c1dc229849300ceb30a81d50b611aaaab9e158`
+>     - `openwrt-qualcommax-ipq50xx-tplink_archer-ax23-v2-squashfs-factory.ubi`: `4d0555cdd30219fcb98e53001746fbc232fc002aaf4e10b3ef2193d484edb1f5`
+>     - `openwrt-qualcommax-ipq50xx-tplink_archer-ax23-v2-squashfs-sysupgrade.bin`: `15585195d31d34a7dd41506a870996f4fcb9ad7cbb04df4b76a69b3ab117d913`
+>   - Host regression checks run against compiled `build_dir/` sources: `test_ath11k_rings.py`
+>     (13/13 OK), `check_ath11k_ring_alloc.py` (10/10 PASS), `check_ath11k_cleanup.py` (PASS),
+>     and `check_mpd_recovery.py` (scenarios `S1`-`S9` PASS).
+>   - **Hardware status:** M3 (Wi-Fi operation on physical hardware) remains `[OPEN]`
+>     (unverified on hardware) until `v0.6-test` is booted via TFTP and compared against
+>     the stock firmware baseline (`24 dBm` / NF `-101 dBm` on 2.4 GHz; `26 dBm` / NF `-97 dBm`
+>     on 5 GHz).
 >
 ## Scope and evidence conventions
 
@@ -346,7 +387,7 @@ designed to be non-persistent.
 | DTS to DTB consistency | Statically consistent (`[VERIFIED]`, S5-S6) |
 | Boot on the physical device | Demonstrated (v0.2–v0.5 TFTP RAM boot), including 3/3 cold boots in v0.5 `[REPORTED]` |
 | Switch / Ethernet | Demonstrated on hardware (2.5G trunk stable across cold boots, br-lan forwarding, WAN, LAN-to-WAN with DHCP; Veraxis, 2026-11-20, v0.5) `[REPORTED]` |
-| Wi-Fi 2.4 / 5 GHz | **Not demonstrated** (calibration offsets verified; board-data loading fails with error -12) `[OPEN]` |
+| Wi-Fi 2.4 / 5 GHz | **Not yet demonstrated on hardware** (host-side `-12` root cause and `0:ART` layout `[VERIFIED]`; `v0.6-test` image built with `board-2.bin` and low-memory `ath11k` / Q6 recovery patches, awaiting hardware TFTP boot) `[OPEN]` |
 | Default network config and MAC assignment | Verified on physical hardware (patches 0002–0005, v0.4-3) `[VERIFIED]` / `[REPORTED]` |
 | Persistent install / `sysupgrade` / rollback | **Not implemented** |
 | Switch driver patch set | Carries v7 of an upstream series (openwrt/openwrt#19644), with third-party and local hardware validation. Newer revisions are not part of v0.5; v0.5 adds the UNIPHY PCS preconfiguration (patch `0006`) on top. |

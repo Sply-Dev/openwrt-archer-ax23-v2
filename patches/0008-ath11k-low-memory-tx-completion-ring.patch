@@ -1,0 +1,198 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
+Date: Sat, 21 Nov 2026 16:44:02 +0000
+Subject: [PATCH 12/14] mac80211: ath11k: smaller TX completion ring in FW
+ memory mode 2
+
+Boards declaring qcom,ath11k-fw-memory-mode = <2> (256 MiB) otherwise
+need an order-9 DMA block and an order-8 kmalloc per radio for the TX
+completion ring when the firmware becomes ready. Use 2048 entries there
+and make the wrap macro, status FIFO and msdu_id IDR range follow the
+runtime size; bound the IDR so one handler pass always drains every
+completion. See the patch description.
+---
+ ...-completion-ring-in-FW-memory-mode-2.patch | 175 ++++++++++++++++++
+ 1 file changed, 175 insertions(+)
+ create mode 100644 package/kernel/mac80211/patches/ath11k/961-wifi-ath11k-smaller-TX-completion-ring-in-FW-memory-mode-2.patch
+
+diff --git a/package/kernel/mac80211/patches/ath11k/961-wifi-ath11k-smaller-TX-completion-ring-in-FW-memory-mode-2.patch b/package/kernel/mac80211/patches/ath11k/961-wifi-ath11k-smaller-TX-completion-ring-in-FW-memory-mode-2.patch
+new file mode 100644
+index 0000000000..82868ec820
+--- /dev/null
++++ b/package/kernel/mac80211/patches/ath11k/961-wifi-ath11k-smaller-TX-completion-ring-in-FW-memory-mode-2.patch
+@@ -0,0 +1,175 @@
++From: AX23_V2_OPENWRT project
++Subject: [PATCH] wifi: ath11k: smaller TX completion ring in FW memory mode 2
++
++Companion to 960 (RX rings). The TX completion (WBM2SW release) ring
++has 32768 entries of 32 bytes. ath11k_dp_srng_setup() requests
++32768 * 32 + 7 bytes, so the DMA allocator needs an order-9 (2 MiB)
++physically contiguous block per radio (no CMA, no IOMMU on IPQ5018),
++and ath11k_dp_alloc() adds a 1 MiB (order-8) kmalloc for the host
++status FIFO. Both happen when the firmware becomes ready, i.e. after
++userspace has started, when a 256 MiB system may no longer have such
++blocks free.
++
++On boards that declare "qcom,ath11k-fw-memory-mode = <2>" (the 256 MiB
++FW profile) use 2048 entries instead. All logic derived from the ring
++size follows the runtime value, kept in struct ath11k_dp:
++
++  - the WBM2SW release ring size passed to ath11k_dp_srng_setup()
++  - the host tx_status FIFO allocation and its initial tail
++  - ATH11K_TX_COMPL_NEXT(), now wrapping at the runtime size
++  - the txbuf_idr msdu_id range in ath11k_dp_tx()
++
++The IDR range is bounded at size - 2 rather than size - 1: one pass of
++ath11k_dp_tx_completion_handler() moves at most size - 2 descriptors
++into the FIFO (the copy loop stops at head == tail - 1 with the tail
++starting at size - 1), so with size - 1 frames in flight one completion
++would wait for a later interrupt behind a "status_fifo is full"
++warning. That is unreachable with 32768 entries but reachable with
++2048 under load.
++
++2048 is the low-memory value of the ath-next proposal "wifi: ath11k:
++use smaller DP rings on low-memory systems" (tested there on an
++IPQ5018 + QCN6122 board with WLAN.HK.2.7.0.1-01744) and of OpenWrt
++PR #21495; it is 4x the 512-entry TCL data ring. That proposal selects
++the profile from total RAM and also changes the RX rings; here the RX
++rings stay with 960 and the selection uses the same FW-memory-mode
++criterion as 960, so the two patches do not overlap. Drop this patch
++if an equivalent change lands in the ath11k backport.
++
++Memory per radio: 2 MiB DMA + 1 MiB kmalloc -> 128 KiB + 64 KiB.
++---
++diff --git a/drivers/net/wireless/ath/ath11k/dp.c b/drivers/net/wireless/ath/ath11k/dp.c
++index f389b97..db811d2 100644
++--- a/drivers/net/wireless/ath/ath11k/dp.c
+++++ b/drivers/net/wireless/ath/ath11k/dp.c
++@@ -412,7 +412,7 @@ static int ath11k_dp_srng_common_setup(struct ath11k_base *ab)
++ 
++ 		ret = ath11k_dp_srng_setup(ab, &dp->tx_ring[i].tcl_comp_ring,
++ 					   HAL_WBM2SW_RELEASE, wbm_num, 0,
++-					   DP_TX_COMP_RING_SIZE);
+++					   dp->tx_comp_ring_size);
++ 		if (ret) {
++ 			ath11k_warn(ab, "failed to set up tcl_comp ring (%d) :%d\n",
++ 				    i, ret);
++@@ -1063,6 +1063,10 @@ int ath11k_dp_alloc(struct ath11k_base *ab)
++ 
++ 	dp->reo_cmd_cache_flush_count = 0;
++ 
+++	/* Must be set before ath11k_dp_srng_common_setup() creates the rings */
+++	dp->tx_comp_ring_size = ab->hw_params.fw_mem_mode == 2 ?
+++			       DP_TX_COMP_RING_SIZE_LOWMEM : DP_TX_COMP_RING_SIZE;
+++
++ 	ret = ath11k_wbm_idle_ring_setup(ab, &n_link_desc);
++ 	if (ret) {
++ 		ath11k_warn(ab, "failed to setup wbm_idle_ring: %d\n", ret);
++@@ -1082,7 +1086,7 @@ int ath11k_dp_alloc(struct ath11k_base *ab)
++ 	if (ret)
++ 		goto fail_link_desc_cleanup;
++ 
++-	size = sizeof(struct hal_wbm_release_ring) * DP_TX_COMP_RING_SIZE;
+++	size = sizeof(struct hal_wbm_release_ring) * dp->tx_comp_ring_size;
++ 
++ 	for (i = 0; i < ab->hw_params.hal_params->num_tx_rings; i++) {
++ 		idr_init(&dp->tx_ring[i].txbuf_idr);
++@@ -1090,7 +1094,7 @@ int ath11k_dp_alloc(struct ath11k_base *ab)
++ 		dp->tx_ring[i].tcl_data_ring_id = i;
++ 
++ 		dp->tx_ring[i].tx_status_head = 0;
++-		dp->tx_ring[i].tx_status_tail = DP_TX_COMP_RING_SIZE - 1;
+++		dp->tx_ring[i].tx_status_tail = dp->tx_comp_ring_size - 1;
++ 		dp->tx_ring[i].tx_status = kmalloc(size, GFP_KERNEL);
++ 		if (!dp->tx_ring[i].tx_status) {
++ 			ret = -ENOMEM;
++diff --git a/drivers/net/wireless/ath/ath11k/dp.h b/drivers/net/wireless/ath/ath11k/dp.h
++index 8df57e2..71808b1 100644
++--- a/drivers/net/wireless/ath/ath11k/dp.h
+++++ b/drivers/net/wireless/ath/ath11k/dp.h
++@@ -78,7 +78,7 @@ struct dp_rxdma_ring {
++ 	int bufs_max;
++ };
++ 
++-#define ATH11K_TX_COMPL_NEXT(x)	(((x) + 1) % DP_TX_COMP_RING_SIZE)
+++#define ATH11K_TX_COMPL_NEXT(dp, x)	(((x) + 1) % (dp)->tx_comp_ring_size)
++ 
++ struct dp_tx_ring {
++ 	u8 tcl_data_ring_id;
++@@ -206,7 +206,13 @@ struct ath11k_pdev_dp {
++ #define DP_TCL_DATA_RING_SIZE		512
++ #define DP_TCL_DATA_RING_SIZE_WCN6750	2048
++ #define DP_TX_COMP_RING_SIZE		32768
++-#define DP_TX_IDR_SIZE			DP_TX_COMP_RING_SIZE
+++/* TX completion ring (and its host status FIFO and msdu_id IDR range) in
+++ * FW memory mode 2, the 256 MiB profile. The default ring needs one
+++ * physically contiguous 2 MiB DMA block plus a 1 MiB kmalloc per radio,
+++ * which a fragmented 256 MiB system may not provide when the firmware
+++ * becomes ready. 2048 entries still exceed the 512-entry TCL data ring.
+++ */
+++#define DP_TX_COMP_RING_SIZE_LOWMEM	2048
++ #define DP_TCL_CMD_RING_SIZE		32
++ #define DP_TCL_STATUS_RING_SIZE		32
++ #define DP_REO_DST_RING_MAX		4
++@@ -271,6 +277,8 @@ struct ath11k_hp_update_timer {
++ 
++ struct ath11k_dp {
++ 	struct ath11k_base *ab;
+++	/* entries in each TX completion ring, its status FIFO and txbuf_idr */
+++	u32 tx_comp_ring_size;
++ 	enum ath11k_htc_ep_id eid;
++ 	struct completion htt_tgt_version_received;
++ 	u8 htt_tgt_ver_major;
++diff --git a/drivers/net/wireless/ath/ath11k/dp_tx.c b/drivers/net/wireless/ath/ath11k/dp_tx.c
++index cac970c..cf73c5e 100644
++--- a/drivers/net/wireless/ath/ath11k/dp_tx.c
+++++ b/drivers/net/wireless/ath/ath11k/dp_tx.c
++@@ -120,9 +120,14 @@ tcl_ring_sel:
++ 
++ 	tx_ring = &dp->tx_ring[ti.ring_id];
++ 
+++	/* msdu_ids 0 .. size - 3: at most size - 2 frames in flight, which is
+++	 * what one ath11k_dp_tx_completion_handler() pass moves from the
+++	 * completion ring into the tx_status FIFO (head == size - 2 stops it),
+++	 * so no completion is ever left behind for a later interrupt.
+++	 */
++ 	spin_lock_bh(&tx_ring->tx_idr_lock);
++ 	ret = idr_alloc(&tx_ring->txbuf_idr, skb, 0,
++-			DP_TX_IDR_SIZE - 1, GFP_ATOMIC);
+++			dp->tx_comp_ring_size - 2, GFP_ATOMIC);
++ 	spin_unlock_bh(&tx_ring->tx_idr_lock);
++ 
++ 	if (unlikely(ret < 0)) {
++@@ -701,17 +706,17 @@ void ath11k_dp_tx_completion_handler(struct ath11k_base *ab, int ring_id)
++ 
++ 	ath11k_hal_srng_access_begin(ab, status_ring);
++ 
++-	while ((ATH11K_TX_COMPL_NEXT(tx_ring->tx_status_head) !=
+++	while ((ATH11K_TX_COMPL_NEXT(dp, tx_ring->tx_status_head) !=
++ 		tx_ring->tx_status_tail) &&
++ 	       (desc = ath11k_hal_srng_dst_get_next_entry(ab, status_ring))) {
++ 		memcpy(&tx_ring->tx_status[tx_ring->tx_status_head],
++ 		       desc, sizeof(struct hal_wbm_release_ring));
++ 		tx_ring->tx_status_head =
++-			ATH11K_TX_COMPL_NEXT(tx_ring->tx_status_head);
+++			ATH11K_TX_COMPL_NEXT(dp, tx_ring->tx_status_head);
++ 	}
++ 
++ 	if (unlikely((ath11k_hal_srng_dst_peek(ab, status_ring) != NULL) &&
++-		     (ATH11K_TX_COMPL_NEXT(tx_ring->tx_status_head) ==
+++		     (ATH11K_TX_COMPL_NEXT(dp, tx_ring->tx_status_head) ==
++ 		      tx_ring->tx_status_tail))) {
++ 		/* TODO: Process pending tx_status messages when kfifo_is_full() */
++ 		ath11k_warn(ab, "Unable to process some of the tx_status ring desc because status_fifo is full\n");
++@@ -721,12 +726,12 @@ void ath11k_dp_tx_completion_handler(struct ath11k_base *ab, int ring_id)
++ 
++ 	spin_unlock_bh(&status_ring->lock);
++ 
++-	while (ATH11K_TX_COMPL_NEXT(tx_ring->tx_status_tail) != tx_ring->tx_status_head) {
+++	while (ATH11K_TX_COMPL_NEXT(dp, tx_ring->tx_status_tail) != tx_ring->tx_status_head) {
++ 		struct hal_wbm_release_ring *tx_status;
++ 		u32 desc_id;
++ 
++ 		tx_ring->tx_status_tail =
++-			ATH11K_TX_COMPL_NEXT(tx_ring->tx_status_tail);
+++			ATH11K_TX_COMPL_NEXT(dp, tx_ring->tx_status_tail);
++ 		tx_status = &tx_ring->tx_status[tx_ring->tx_status_tail];
++ 		ath11k_dp_tx_status_parse(ab, tx_status, &ts);
++ 

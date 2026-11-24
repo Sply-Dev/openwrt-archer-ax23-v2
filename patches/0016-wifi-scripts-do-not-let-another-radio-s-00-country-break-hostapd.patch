@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
+Date: Sat, 21 Nov 2026 10:59:46 +0000
+Subject: [PATCH] wifi-scripts: do not let another radio's '00' country break
+ hostapd
+
+device_country_code() overwrote the radio's country with the country of
+every radio in network.wireless status, so the last one won. A radio left
+at the world domain '00' (wifi config uses '00' for 6 GHz-capable phys)
+then forced country_code=00 with ieee80211d=1 on all APs, hostapd failed
+with "Invalid country_code '00'" and no AP started.
+
+Prefer the radio's own explicit country, otherwise the first explicit
+non-world country of another radio, and never pass '00' to hostapd.
+
+Found with the AX23_V2_OPENWRT digital-twin test (mac80211_hwsim).
+---
+ .../usr/share/ucode/wifi/hostapd.uc           | 26 ++++++++++++++-----
+ 1 file changed, 20 insertions(+), 6 deletions(-)
+
+diff --git a/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/hostapd.uc b/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/hostapd.uc
+index 10f5a99922..1f32f7a0bc 100644
+--- a/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/hostapd.uc
++++ b/package/network/config/wifi-scripts/files-ucode/usr/share/ucode/wifi/hostapd.uc
+@@ -67,15 +67,29 @@ function device_log_append(config) {
+ 
+ /* setup country code */
+ function device_country_code(config) {
+-	let status = global.ubus.call('network.wireless', 'status');
+-	for (let name, radio in status) {
+-		if (!radio.config.country)
+-			continue;
+-		config.country_code = radio.config.country;
++	/* The regulatory domain is global, so radios are aligned to one country.
++	 * Prefer this radio's own explicit country; otherwise take the first
++	 * explicit (non-world) country of another radio. A radio left at '00'
++	 * (e.g. an auto-detected 6 GHz-capable phy) must not override an
++	 * explicit country: hostapd rejects country_code=00 together with
++	 * ieee80211d and the whole AP fails to start.
++	 */
++	let own = config.country_code;
++	if (!own || own == '00') {
++		let status = global.ubus.call('network.wireless', 'status');
++		for (let name, radio in status) {
++			let c = radio.config.country;
++			if (c && c != '00') {
++				config.country_code = c;
++				break;
++			}
++		}
+ 	}
+ 
+-	if (!exists(config, 'country_code'))
++	if (!config.country_code || config.country_code == '00') {
++		delete config.country_code;
+ 		return;
++	}
+ 
+ 	if (config.hw_mode != 'a')
+ 		delete config.ieee80211h;

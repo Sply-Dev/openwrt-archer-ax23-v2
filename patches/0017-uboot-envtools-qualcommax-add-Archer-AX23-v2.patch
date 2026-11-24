@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
+Date: Sat, 21 Nov 2026 15:22:06 +0000
+Subject: [PATCH] uboot-envtools: qualcommax: add Archer AX23 v2
+
+The environment layout is taken from TP-Link's GPL U-Boot for this board
+(GPL_AX23v2.tar.gz, u-boot-2016): CONFIG_ENV_IS_IN_NAND with
+CONFIG_ENV_SIZE = CONFIG_ENV_SIZE_MAX = 256 KiB at the start of the
+0:APPSBLENV partition (board_init.c: board_env_offset = first block of
+that partition), 128 KiB erase blocks. This matches the existing
+Archer AX55 v1 entry.
+
+This makes 'fw_printenv tp_boot_idx' usable for read-only diagnostics.
+sysupgrade stays refused on this board, so nothing in the image writes
+the environment.
+---
+ package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq50xx | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq50xx b/package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq50xx
+index ed506968f3..8bb5d2964c 100644
+--- a/package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq50xx
++++ b/package/boot/uboot-tools/uboot-envtools/files/qualcommax_ipq50xx
+@@ -21,6 +21,7 @@ zyxel,scr50axe)
+ 	ubootenv_add_mtd "0:appsblenv" "0x0" "0x40000" "0x20000"
+ 	;;
+ glinet,gl-b3000|\
++tplink,archer-ax23-v2|\
+ tplink,archer-ax55-v1|\
+ tplink,eap650-outdoor-v1)
+ 	ubootenv_add_mtd "0:APPSBLENV" "0x0" "0x40000" "0x20000"

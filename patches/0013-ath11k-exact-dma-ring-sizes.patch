@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
+Date: Sat, 21 Nov 2026 22:44:27 +0000
+Subject: [PATCH] mac80211: ath11k: request exact ring sizes from the DMA
+ allocator
+
+ath11k adds HAL_RING_BASE_ALIGN - 1 bytes to every ring allocation. DMA
+allocations are page aligned, so the slack is unused, but dma-direct
+(no IOMMU on IPQ5018) allocates get_order(size) pages: each
+power-of-two ring got a block twice its size. In FW memory mode 2 that
+is about 0.9 MiB per radio of contiguous memory, and it raises the
+WBM idle ring to order 7 and the four REO destination rings to order 6,
+all requested next to the order-9 link descriptor banks.
+
+Request the exact size; keep the base alignment as an explicit check.
+
+Signed-off-by: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
+---
+ ...ct-ring-sizes-from-the-DMA-allocator.patch | 51 +++++++++++++++++++
+ 1 file changed, 51 insertions(+)
+ create mode 100644 package/kernel/mac80211/patches/ath11k/965-wifi-ath11k-request-exact-ring-sizes-from-the-DMA-allocator.patch
+
+diff --git a/package/kernel/mac80211/patches/ath11k/965-wifi-ath11k-request-exact-ring-sizes-from-the-DMA-allocator.patch b/package/kernel/mac80211/patches/ath11k/965-wifi-ath11k-request-exact-ring-sizes-from-the-DMA-allocator.patch
+new file mode 100644
+index 0000000000..458714406c
+--- /dev/null
++++ b/package/kernel/mac80211/patches/ath11k/965-wifi-ath11k-request-exact-ring-sizes-from-the-DMA-allocator.patch
+@@ -0,0 +1,51 @@
++From: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
++Subject: [PATCH] wifi: ath11k: request exact ring sizes from the DMA allocator
++
++ath11k_dp_srng_setup() asks for num_entries * entry_size plus
++HAL_RING_BASE_ALIGN - 1 bytes. DMA allocations are aligned to at least a
++page (Documentation/core-api/dma-api-howto.rst), so the slack is never
++used, but without an IOMMU dma-direct allocates get_order(size) pages:
++every ring whose size is a power of two gets a block twice as large.
++
++On IPQ5018/QCN6122 in FW memory mode 2 this doubles the WBM idle ring
++(256 KiB -> order 7), the four REO destination rings (128 KiB ->
++order 6 each), the TX completion ring and five smaller rings: about
++0.9 MiB per radio of physically contiguous memory requested at
++firmware-ready time, next to the order-9 link descriptor banks.
++
++Request the exact size and refuse a base that does not meet
++HAL_RING_BASE_ALIGN instead of hiding it in slack. Ring geometry,
++entry counts and base alignment seen by the hardware are unchanged.
++
++Signed-off-by: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
++---
++--- a/drivers/net/wireless/ath/ath11k/dp.c
+++++ b/drivers/net/wireless/ath/ath11k/dp.c
++@@ -234,7 +234,11 @@
++ 	if (num_entries > max_entries)
++ 		num_entries = max_entries;
++ 
++-	ring->size = (num_entries * entry_sz) + HAL_RING_BASE_ALIGN - 1;
+++	/*
+++	 * DMA allocations are aligned to at least a page, so no alignment slack
+++	 * is needed; slack would turn every 2^n-byte ring into a 2^(n+1) block.
+++	 */
+++	ring->size = num_entries * entry_sz;
++ 
++ 	if (ab->hw_params.alloc_cacheable_memory) {
++ 		/* Allocate the reo dst and tx completion rings from cacheable memory */
++@@ -261,6 +265,14 @@
++ 	if (!ring->vaddr_unaligned)
++ 		return -ENOMEM;
++ 
+++	if (WARN_ON_ONCE(!IS_ALIGNED(ring->paddr_unaligned, HAL_RING_BASE_ALIGN) ||
+++			 !IS_ALIGNED((unsigned long)ring->vaddr_unaligned,
+++				     HAL_RING_BASE_ALIGN))) {
+++		ring->cached = cached;
+++		ath11k_dp_srng_cleanup(ab, ring);
+++		return -EINVAL;
+++	}
+++
++ 	ring->vaddr = PTR_ALIGN(ring->vaddr_unaligned, HAL_RING_BASE_ALIGN);
++ 	ring->paddr = ring->paddr_unaligned + ((unsigned long)ring->vaddr -
++ 		      (unsigned long)ring->vaddr_unaligned);
+-- 
+2.43.0
+

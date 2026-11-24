@@ -1,0 +1,86 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AX23_V2_OPENWRT <ax23-v2-openwrt@users.noreply.invalid>
+Date: Sat, 21 Nov 2026 18:56:08 +0000
+Subject: [PATCH] mac80211: ath11k: low-memory RX rings follow the reference
+ profiles
+
+Adversarial review of 960: the IPQ5018 RXDMA buffer ring (512) and the
+RXDMA error destination ring (128) matched none of the published
+low-memory profiles. Use 1024 for the buffer ring on both radios and keep
+the error ring at its default. See the patch description.
+---
+ ...-rings-follow-the-reference-profiles.patch | 65 +++++++++++++++++++
+ 1 file changed, 65 insertions(+)
+ create mode 100644 package/kernel/mac80211/patches/ath11k/962-wifi-ath11k-low-memory-RX-rings-follow-the-reference-profiles.patch
+
+diff --git a/package/kernel/mac80211/patches/ath11k/962-wifi-ath11k-low-memory-RX-rings-follow-the-reference-profiles.patch b/package/kernel/mac80211/patches/ath11k/962-wifi-ath11k-low-memory-RX-rings-follow-the-reference-profiles.patch
+new file mode 100644
+index 0000000000..acb55bd797
+--- /dev/null
++++ b/package/kernel/mac80211/patches/ath11k/962-wifi-ath11k-low-memory-RX-rings-follow-the-reference-profiles.patch
+@@ -0,0 +1,65 @@
++From: AX23_V2_OPENWRT project
++Subject: [PATCH] wifi: ath11k: low-memory RX rings follow the reference profiles
++
++Review of 960 against the three published low-memory profiles (the
++ath-next "use smaller DP rings on low-memory systems" proposal, OpenWrt
++PR #21495 and the QSDK 512M profile) found two values none of them uses:
++
++- RXDMA buffer ring 512 on IPQ5018. Every reference uses 1024 (QSDK
++  4096); 512 was only ever measured, on a QCN6122, to overflow under
++  upload bursts. Use 1024 on both radios. Cost: ~1.4 MiB on IPQ5018.
++- RXDMA error destination ring 128. No reference reduces it (all keep
++  1024). It is a hardware-produced descriptor ring with no pre-posted
++  buffers, so 128 saved only ~28 KiB per radio while risking RXDMA
++  back-pressure if an error burst outruns the host. Keep the default.
++
++Monitor/status ring sizes are unchanged (QSDK 512M / ath-next values).
++---
++diff --git a/drivers/net/wireless/ath/ath11k/dp.h b/drivers/net/wireless/ath/ath11k/dp.h
++index 71808b1..04024b9 100644
++--- a/drivers/net/wireless/ath/ath11k/dp.h
+++++ b/drivers/net/wireless/ath/ath11k/dp.h
++@@ -233,13 +233,15 @@ struct ath11k_pdev_dp {
++ /* Host RX ring sizes used when the radio runs in FW memory mode 2
++  * ("qcom,ath11k-fw-memory-mode = <2>", 256 MiB boards). The default sizes
++  * above pre-post ~9200 2 KiB RX buffers per radio, which a 256 MiB IPQ5018
++- * board with two radios cannot afford. Values follow the QSDK 512M profile
++- * for the monitor/status rings; the RXDMA buffer ring is 512 for IPQ5018
++- * and 1024 for QCN6122, which overflows at 512 under upload bursts.
+++ * board with two radios cannot afford. The RXDMA buffer ring is 1024 for
+++ * both radios, the value of the ath-next low-memory profile and of OpenWrt
+++ * PR #21495 (512 was measured to overflow on a QCN6122 under upload bursts).
+++ * The monitor/status rings follow the QSDK 512M profile. The RXDMA error
+++ * destination ring keeps its default: it holds no pre-posted buffers, so
+++ * shrinking it saves only ~28 KiB per radio while risking RXDMA back-pressure
+++ * during an error burst; no reference profile reduces it.
++  */
++-#define DP_RXDMA_BUF_RING_SIZE_LOWMEM		512
++-#define DP_RXDMA_BUF_RING_SIZE_LOWMEM_QCN6122	1024
++-#define DP_RXDMA_ERR_DST_RING_SIZE_LOWMEM	128
+++#define DP_RXDMA_BUF_RING_SIZE_LOWMEM		1024
++ #define DP_RXDMA_MON_STATUS_RING_SIZE_LOWMEM	512
++ #define DP_RXDMA_MONITOR_BUF_RING_SIZE_LOWMEM	128
++ #define DP_RXDMA_MONITOR_DST_RING_SIZE_LOWMEM	128
++diff --git a/drivers/net/wireless/ath/ath11k/dp_rx.c b/drivers/net/wireless/ath/ath11k/dp_rx.c
++index bf07649..65d4535 100644
++--- a/drivers/net/wireless/ath/ath11k/dp_rx.c
+++++ b/drivers/net/wireless/ath/ath11k/dp_rx.c
++@@ -586,14 +586,10 @@ static int ath11k_dp_rx_ring_size(struct ath11k_base *ab,
++ 
++ 	switch (ring) {
++ 	case ATH11K_DP_RX_RING_BUF:
++-		if (!lowmem)
++-			return DP_RXDMA_BUF_RING_SIZE;
++-		return ab->hw_rev == ATH11K_HW_QCN6122_HW10 ?
++-		       DP_RXDMA_BUF_RING_SIZE_LOWMEM_QCN6122 :
++-		       DP_RXDMA_BUF_RING_SIZE_LOWMEM;
+++		return lowmem ? DP_RXDMA_BUF_RING_SIZE_LOWMEM :
+++				DP_RXDMA_BUF_RING_SIZE;
++ 	case ATH11K_DP_RX_RING_ERR_DST:
++-		return lowmem ? DP_RXDMA_ERR_DST_RING_SIZE_LOWMEM :
++-				DP_RXDMA_ERR_DST_RING_SIZE;
+++		return DP_RXDMA_ERR_DST_RING_SIZE;
++ 	case ATH11K_DP_RX_RING_MON_STATUS:
++ 		return lowmem ? DP_RXDMA_MON_STATUS_RING_SIZE_LOWMEM :
++ 				DP_RXDMA_MON_STATUS_RING_SIZE;
